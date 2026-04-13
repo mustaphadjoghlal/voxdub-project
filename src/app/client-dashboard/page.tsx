@@ -21,6 +21,27 @@ interface Order {
   createdAt: any;
 }
 
+const packagesDetails = [
+  {
+    name: 'باقة التعليق الصوتي',
+    price: '5000 د.ج',
+    desc: 'مثالية للمشاريع البسيطة',
+    features: ['تعليق صوتي احترافي', 'جودة تسجيل HD', 'تسليم خلال 3 أيام', 'مراجعة واحدة مجانية']
+  },
+  {
+    name: 'باقة التعليق والتدقيق',
+    price: '8000 د.ج',
+    desc: 'للمحتوى الاحترافي — الأكثر طلباً',
+    features: ['كل مميزات الباقة الأولى', 'تدقيق لغوي للنص', 'تصحيح الأخطاء النحوية', 'تحسين الصياغة']
+  },
+  {
+    name: 'باقة كاملة المحتوى',
+    price: '13000 د.ج',
+    desc: 'حل شامل ومتكامل',
+    features: ['كل مميزات الباقتين السابقتين', 'كتابة النص من الصفر', 'بحث وتطوير المحتوى', 'كتابة إبداعية']
+  },
+];
+
 export default function ClientDashboard() {
   const [mounted, setMounted] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -40,11 +61,10 @@ export default function ClientDashboard() {
   const [formError, setFormError] = useState('');
 
   const workTypes = ['إعلان تجاري', 'وثائقي', 'كتاب صوتي', 'رد آلي (IVR)', 'بودكاست', 'آخر'];
-  const packages = ['باقة التعليق الصوتي', 'باقة التعليق والتدقيق', 'باقة كاملة المحتوى'];
 
   const statusConfig = {
     pending:     { label: 'في انتظار الموافقة', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
-    accepted:    { label: 'تم القبول',           color: 'bg-blue-100 text-blue-700',   icon: CheckCircle },
+    accepted:    { label: 'تم القبول',           color: 'bg-blue-100 text-blue-700',    icon: CheckCircle },
     in_progress: { label: 'جاري التنفيذ',        color: 'bg-purple-100 text-purple-700', icon: PlayCircle },
     review:      { label: 'بحاجة للمراجعة',     color: 'bg-orange-100 text-orange-700', icon: AlertCircle },
     completed:   { label: 'مكتمل',               color: 'bg-green-100 text-green-700',  icon: CheckCircle },
@@ -71,16 +91,16 @@ export default function ClientDashboard() {
       try {
         const ordersSnapshot = await getDocs(collection(db, 'orders'));
         const allOrders = ordersSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
+          id: doc.id, ...doc.data()
         })) as Order[];
         setOrders(allOrders.filter((o: any) => o.clientId === id));
 
+        // جلب كل المعلقين بدون فلتر approved
         const artistsSnapshot = await getDocs(collection(db, 'artists'));
-        const approvedArtists = artistsSnapshot.docs
+        const allArtists = artistsSnapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() as any }))
-          .filter(a => a.approved === true);
-        setArtists(approvedArtists);
+          .filter(a => a.name); // فقط من عنده اسم
+        setArtists(allArtists);
       } catch (err) {
         console.error(err);
       } finally {
@@ -154,15 +174,15 @@ export default function ClientDashboard() {
     review:      orders.filter(o => o.status === 'review').length,
   };
 
+  const selectedPkgDetails = packagesDetails.find(p => p.name === selectedPackage);
+
   return (
     <div className="min-h-screen bg-gray-50" dir="rtl">
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap'); * { font-family: 'Cairo', sans-serif; }`}</style>
 
       <header className="bg-gray-900 text-white px-8 py-5 flex justify-between items-center sticky top-0 z-40">
         <div className="flex items-center gap-3">
-          <div className="bg-red-600 p-2 rounded-xl">
-            <Mic2 className="w-5 h-5 text-white" />
-          </div>
+          <div className="bg-red-600 p-2 rounded-xl"><Mic2 className="w-5 h-5 text-white" /></div>
           <span className="text-xl font-black">Vox<span className="text-red-500">Dub</span></span>
           <span className="text-gray-500 font-bold text-sm mr-2">— لوحة صاحب العمل</span>
         </div>
@@ -177,14 +197,12 @@ export default function ClientDashboard() {
       </header>
 
       <div className="max-w-6xl mx-auto px-6 py-10">
-
-        {/* إحصائيات */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
           {[
-            { label: 'في الانتظار',    value: statusCounts.pending,     color: 'bg-yellow-500', icon: Clock },
-            { label: 'جاري التنفيذ',   value: statusCounts.in_progress, color: 'bg-purple-500', icon: PlayCircle },
-            { label: 'بحاجة مراجعة',  value: statusCounts.review,      color: 'bg-orange-500', icon: AlertCircle },
-            { label: 'مكتملة',         value: statusCounts.completed,   color: 'bg-green-500',  icon: CheckCircle },
+            { label: 'في الانتظار',   value: statusCounts.pending,     color: 'bg-yellow-500', icon: Clock },
+            { label: 'جاري التنفيذ',  value: statusCounts.in_progress, color: 'bg-purple-500', icon: PlayCircle },
+            { label: 'بحاجة مراجعة', value: statusCounts.review,      color: 'bg-orange-500', icon: AlertCircle },
+            { label: 'مكتملة',        value: statusCounts.completed,   color: 'bg-green-500',  icon: CheckCircle },
           ].map((stat, i) => (
             <div key={i} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
               <div className={`w-10 h-10 ${stat.color} rounded-xl flex items-center justify-center mb-3`}>
@@ -196,7 +214,6 @@ export default function ClientDashboard() {
           ))}
         </div>
 
-        {/* زر طلب جديد */}
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-black text-gray-900">طلباتي</h2>
           <button onClick={() => setShowForm(true)}
@@ -205,7 +222,6 @@ export default function ClientDashboard() {
           </button>
         </div>
 
-        {/* قائمة الطلبات */}
         {orders.length === 0 ? (
           <div className="bg-white rounded-3xl p-16 text-center border border-gray-100">
             <FileText size={48} className="text-gray-200 mx-auto mb-4" />
@@ -219,26 +235,16 @@ export default function ClientDashboard() {
               const StatusIcon = status.icon;
               return (
                 <div key={order.id} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="font-black text-gray-900">{order.selectedPackage}</h3>
-                        <span className={`px-3 py-1 rounded-full text-xs font-black flex items-center gap-1 ${status.color}`}>
-                          <StatusIcon size={12} />
-                          {status.label}
-                        </span>
-                      </div>
-                      <p className="text-gray-500 font-bold text-sm mb-1">
-                        المعلق: <span className="text-gray-700">{order.selectedVoiceActor}</span>
-                      </p>
-                      <p className="text-gray-500 font-bold text-sm mb-1">
-                        نوع العمل: <span className="text-gray-700">{order.workType}</span>
-                      </p>
-                      {order.description && (
-                        <p className="text-gray-400 font-bold text-xs mt-2 line-clamp-2">{order.description}</p>
-                      )}
-                    </div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <h3 className="font-black text-gray-900">{order.selectedPackage}</h3>
+                    <span className={`px-3 py-1 rounded-full text-xs font-black flex items-center gap-1 ${status.color}`}>
+                      <StatusIcon size={12} />
+                      {status.label}
+                    </span>
                   </div>
+                  <p className="text-gray-500 font-bold text-sm mb-1">المعلق: <span className="text-gray-700">{order.selectedVoiceActor}</span></p>
+                  <p className="text-gray-500 font-bold text-sm mb-1">نوع العمل: <span className="text-gray-700">{order.workType}</span></p>
+                  {order.description && <p className="text-gray-400 font-bold text-xs mt-2 line-clamp-2">{order.description}</p>}
                 </div>
               );
             })}
@@ -258,47 +264,78 @@ export default function ClientDashboard() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
+
+              {/* الباقة — قائمة منسدلة مع تفاصيل */}
               <div>
-                <label className="block text-sm font-black text-gray-700 mb-3">اختر الباقة *</label>
-                <div className="space-y-2">
-                  {packages.map(pkg => (
-                    <div key={pkg} onClick={() => setSelectedPackage(pkg)}
-                      className={`cursor-pointer p-4 rounded-2xl border-2 transition-all ${selectedPackage === pkg ? 'border-red-600 bg-red-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                      <p className="font-black text-gray-900 text-sm">{pkg}</p>
-                    </div>
+                <label className="block text-sm font-black text-gray-700 mb-2">اختر الباقة *</label>
+                <select
+                  value={selectedPackage}
+                  onChange={e => setSelectedPackage(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400"
+                >
+                  <option value="">— اختر الباقة —</option>
+                  {packagesDetails.map(pkg => (
+                    <option key={pkg.name} value={pkg.name}>
+                      {pkg.name} — {pkg.price}
+                    </option>
                   ))}
-                </div>
+                </select>
+
+                {/* تفاصيل الباقة المختارة */}
+                {selectedPkgDetails && (
+                  <div className="mt-3 bg-red-50 border border-red-100 rounded-2xl p-4">
+                    <p className="font-black text-red-700 text-sm mb-1">{selectedPkgDetails.name} — {selectedPkgDetails.price}</p>
+                    <p className="text-red-500 font-bold text-xs mb-2">{selectedPkgDetails.desc}</p>
+                    <ul className="space-y-1">
+                      {selectedPkgDetails.features.map((f, i) => (
+                        <li key={i} className="text-xs text-red-600 font-bold flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
 
+              {/* المعلق — قائمة منسدلة */}
               <div>
-                <label className="block text-sm font-black text-gray-700 mb-3">اختر المعلق الصوتي *</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[...artists.map(a => a.name), 'اختيار الأنسب من طرفكم'].map(name => (
-                    <button key={name} type="button" onClick={() => setSelectedVoiceActor(name)}
-                      className={`p-3 text-xs font-black border rounded-xl transition-all ${selectedVoiceActor === name ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:border-red-400'}`}>
-                      {name}
-                    </button>
+                <label className="block text-sm font-black text-gray-700 mb-2">اختر المعلق الصوتي *</label>
+                <select
+                  value={selectedVoiceActor}
+                  onChange={e => setSelectedVoiceActor(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400"
+                >
+                  <option value="">— اختر المعلق —</option>
+                  {artists.map(a => (
+                    <option key={a.id} value={a.name}>
+                      {a.name}{a.voiceType ? ` — ${a.voiceType}` : ''}{a.gender ? ` — ${a.gender}` : ''}
+                    </option>
                   ))}
-                </div>
+                  <option value="اختيار الأنسب من طرفكم">اختيار الأنسب من طرفكم</option>
+                </select>
               </div>
 
+              {/* نوع العمل */}
               <div>
                 <label className="block text-sm font-black text-gray-700 mb-2">نوع العمل *</label>
                 <select value={workType} onChange={e => setWorkType(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm">
-                  <option value="">اختر نوع العمل</option>
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400">
+                  <option value="">— اختر نوع العمل —</option>
                   {workTypes.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
 
+              {/* التفاصيل */}
               <div>
                 <label className="block text-sm font-black text-gray-700 mb-2">تفاصيل المشروع *</label>
                 <textarea value={description} onChange={e => setDescription(e.target.value)}
                   required rows={4}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm resize-none"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm resize-none focus:border-red-400"
                   placeholder="اشرح مشروعك بالتفصيل..." />
               </div>
 
+              {/* ملف مرفق */}
               <div>
                 <label className="block text-sm font-black text-gray-700 mb-2">ملف مرفق (اختياري)</label>
                 <input type="file" onChange={e => setAttachedFile(e.target.files?.[0] || null)}
