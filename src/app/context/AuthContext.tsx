@@ -8,23 +8,22 @@ interface AuthContextType {
   userRole: Role;
   setUserRole: (role: Role) => void;
   logout: () => void;
-  isLoaded: boolean;          // ← مهم جدًا
+  isLoaded: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userRole, setRoleState] = useState<Role>('visitor');
-  const [isLoaded, setIsLoaded] = useState(false);   // ← جديد
+  const [isLoaded, setIsLoaded] = useState(false);
 
-  // تحميل الدور من localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('userRole');
       if (['admin', 'artist', 'client'].includes(saved || '')) {
         setRoleState(saved as Role);
       }
-      setIsLoaded(true);        // ← مهم: يقول إن الـ auth جاهز
+      setIsLoaded(true);
     }
   }, []);
 
