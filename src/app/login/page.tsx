@@ -2,9 +2,8 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useAuth } from '../context/AuthContext';           // ← المسار الصحيح
-import { collection, getDocs, addDoc } from 'firebase/firestore';
-import { db } from '../components/firebase';               // ← المسار الصحيح
+import { useAuth } from '../context/AuthContext';
+import { db } from '../components/firebase';
 
 export default function Login() {
   const { setUserRole, isLoaded } = useAuth();
@@ -20,18 +19,21 @@ export default function Login() {
     setError('');
 
     try {
-      // هنا تضع منطق تسجيل الدخول الحقيقي لاحقاً (مع Firebase Auth أو Supabase)
-      // حالياً نستخدم localStorage كحل مؤقت
-      if (email.includes('artist')) {
-        setUserRole('artist');
-      } else if (email.includes('client')) {
-        setUserRole('client');
-      } else {
-        setUserRole('client'); // افتراضي
+      // منطق تسجيل الدخول المؤقت (بناءً على الإيميل)
+      let role: 'artist' | 'client' = 'client';
+      
+      if (email.toLowerCase().includes('artist')) {
+        role = 'artist';
+      } else if (email.toLowerCase().includes('client')) {
+        role = 'client';
       }
 
-      // توجيه بعد تسجيل الدخول
-      window.location.href = '/dashboard';   // أو أي صفحة داشبورد عندك
+      // حفظ الدور
+      setUserRole(role);
+
+      // توجيه بدون reload كامل (أفضل طريقة)
+      window.location.href = role === 'artist' ? '/dashboard' : '/client-dashboard';
+
     } catch (err: any) {
       setError(err.message || 'حدث خطأ أثناء تسجيل الدخول');
     } finally {
