@@ -1,45 +1,42 @@
-'use client';
+import React, { createContext, useContext, useState } from 'react';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
-
-type Role = 'admin' | 'artist' | 'client' | 'visitor';
+type Role = 'admin' | 'artist' | 'visitor';
 
 interface AuthContextType {
   userRole: Role;
   setUserRole: (role: Role) => void;
+  login: (user: string, pass: string) => boolean;
   logout: () => void;
-  isLoaded: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [userRole, setRoleState] = useState<Role>('visitor');
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  useEffect(() => {
-    // هذا الـ useEffect يشتغل مرة واحدة فقط بعد تحميل الصفحة في المتصفح
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('userRole');
-      if (saved && ['admin', 'artist', 'client'].includes(saved)) {
-        setRoleState(saved as Role);
-      }
-      setIsLoaded(true);   // ← مهم جداً: نعلن أن الـ auth جاهز
-    }
-  }, []);
+  const [userRole, setRoleState] = useState<Role>(() => {
+    const saved = localStorage.getItem('voxdub_user_role');
+    if (saved === 'admin' || saved === 'artist') return saved;
+    return 'visitor';
+  });
 
   const setUserRole = (role: Role) => {
-    localStorage.setItem('userRole', role);
+    localStorage.setItem('voxdub_user_role', role);
     setRoleState(role);
   };
 
+  const login = (user: string, pass: string): boolean => {
+    if (user === 'admin2026' && pass === 'admin2026') {
+      setUserRole('admin');
+      return true;
+    }
+    return false;
+  };
+
   const logout = () => {
-    localStorage.removeItem('userRole');
-    setRoleState('visitor');
+    setUserRole('visitor');
   };
 
   return (
-    <AuthContext.Provider value={{ userRole, setUserRole, logout, isLoaded }}>
+    <AuthContext.Provider value={{ userRole, setUserRole, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
@@ -47,8 +44,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
 }
