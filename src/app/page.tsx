@@ -32,8 +32,7 @@ interface Artist {
 }
 
 export default function Home() {
-  const { isLoaded } = useAuth();   // ← غيّر السطر إلى هذا
-
+  const { isLoaded, userRole } = useAuth();
   const [artists, setArtists] = useState<Artist[]>([]);
   const [loadingArtists, setLoadingArtists] = useState(true);
   const [playingId, setPlayingId] = useState<string | null>(null);
