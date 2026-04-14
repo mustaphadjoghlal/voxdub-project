@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useAuth } from './context/AuthContext';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from './components/firebase';
+
 import {
   Mic2, Play, Pause, Award, Star, Mic,
   Search, MessageSquare, Headphones, FileCheck,
@@ -30,15 +32,35 @@ interface Artist {
 }
 
 export default function Home() {
+  const { userRole, isLoaded } = useAuth();
+
   const [artists, setArtists] = useState<Artist[]>([]);
   const [loadingArtists, setLoadingArtists] = useState(true);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
 
   const packages = [
-    { name: 'باقة التعليق الصوتي', price: '5000', popular: false, desc: 'مثالية للمشاريع البسيطة', features: ['تعليق صوتي احترافي', 'جودة تسجيل HD', 'تسليم خلال 3 أيام', 'مراجعة واحدة مجانية'] },
-    { name: 'باقة التعليق والتدقيق', price: '8000', popular: true, desc: 'للمحتوى الاحترافي', features: ['كل مميزات الباقة الأولى', 'تدقيق لغوي للنص', 'تصحيح الأخطاء النحوية', 'تحسين الصياغة'] },
-    { name: 'باقة كاملة المحتوى', price: '13000', popular: false, desc: 'حل شامل ومتكامل', features: ['كل مميزات الباقتين السابقتين', 'كتابة النص من الصفر', 'بحث وتطوير المحتوى', 'كتابة إبداعية'] },
+    { 
+      name: 'باقة التعليق الصوتي', 
+      price: '5000', 
+      popular: false, 
+      desc: 'مثالية للمشاريع البسيطة', 
+      features: ['تعليق صوتي احترافي', 'جودة تسجيل HD', 'تسليم خلال 3 أيام', 'مراجعة واحدة مجانية'] 
+    },
+    { 
+      name: 'باقة التعليق والتدقيق', 
+      price: '8000', 
+      popular: true, 
+      desc: 'للمحتوى الاحترافي', 
+      features: ['كل مميزات الباقة الأولى', 'تدقيق لغوي للنص', 'تصحيح الأخطاء النحوية', 'تحسين الصياغة'] 
+    },
+    { 
+      name: 'باقة كاملة المحتوى', 
+      price: '13000', 
+      popular: false, 
+      desc: 'حل شامل ومتكامل', 
+      features: ['كل مميزات الباقتين السابقتين', 'كتابة النص من الصفر', 'بحث وتطوير المحتوى', 'كتابة إبداعية'] 
+    },
   ];
 
   const getAudioUrl = (artist: Artist): string | null => {
@@ -49,26 +71,35 @@ export default function Home() {
     return artist.audio || null;
   };
 
+  // جلب المعلقين مع فلترة من ليس لديهم عينة صوتية
   useEffect(() => {
     const fetchArtists = async () => {
       try {
         const snapshot = await getDocs(collection(db, 'artists'));
         const data = snapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() } as Artist))
-          .filter(a => a.name);
+          .filter((artist: Artist) => {
+            const hasAudio = 
+              (artist.audioSamples && artist.audioSamples.length > 0) || 
+              !!artist.audio;
+            return artist.name && hasAudio;
+          });
+
         setArtists(data);
       } catch (err) {
-        console.error(err);
+        console.error("خطأ في جلب المعلقين:", err);
       } finally {
         setLoadingArtists(false);
       }
     };
+
     fetchArtists();
   }, []);
 
   const toggleAudio = (artist: Artist) => {
     const audioUrl = getAudioUrl(artist);
     if (!audioUrl) return;
+
     if (playingId === artist.id) {
       currentAudio?.pause();
       setPlayingId(null);
@@ -81,6 +112,18 @@ export default function Home() {
       newAudio.onended = () => setPlayingId(null);
     }
   };
+
+  // عرض شاشة التحميل أثناء تحميل الـ Auth
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-center">
+          <div className="animate-spin w-10 h-10 border-4 border-red-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-500 font-bold">جاري تحميل الموقع...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white font-sans text-right" dir="rtl">
@@ -161,7 +204,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Artists */}
+      {/* Artists Section */}
       <section id="artists" className="py-24 bg-gray-50">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
@@ -170,15 +213,21 @@ export default function Home() {
           </div>
 
           {loadingArtists ? (
-            <div className="text-center py-20 text-gray-400 font-bold">جاري تحميل المعلقين...</div>
+            <div className="text-center py-20">
+              <div className="animate-spin w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+              <p className="text-gray-500 font-bold">جاري تحميل المعلقين...</p>
+            </div>
           ) : artists.length === 0 ? (
-            <div className="text-center py-20 text-gray-400 font-bold">لا يوجد معلقون حالياً</div>
+            <div className="text-center py-20 text-gray-400 font-bold">
+              لا يوجد معلقون معتمدون بعينات صوتية حالياً
+            </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {artists.map((artist) => {
                 const audioUrl = getAudioUrl(artist);
                 const hasAudio = !!audioUrl;
                 const isPlaying = playingId === artist.id;
+
                 return (
                   <div key={artist.id} className="bg-gray-900 rounded-3xl p-8 text-white hover:-translate-y-2 transition-transform duration-300">
                     <div className="flex justify-between items-start mb-6">
@@ -218,7 +267,11 @@ export default function Home() {
                     <div className="flex items-center gap-4 bg-white/5 p-4 rounded-2xl mb-6 border border-white/10">
                       <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-700 flex-shrink-0">
                         {(artist.profilePicture || artist.image) ? (
-                          <img src={artist.profilePicture || artist.image} alt={artist.name} className="w-full h-full object-cover" />
+                          <img 
+                            src={artist.profilePicture || artist.image} 
+                            alt={artist.name} 
+                            className="w-full h-full object-cover" 
+                          />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-2xl font-black text-gray-400">
                             {artist.name?.[0] || '?'}
