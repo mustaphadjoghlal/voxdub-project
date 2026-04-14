@@ -3,112 +3,57 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '../context/AuthContext';
-import { db } from '../components/firebase';
 
 export default function Login() {
-  const { setUserRole, isLoaded } = useAuth();
+  const { setUserRole } = useAuth();
   
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
 
-    try {
-      // منطق تسجيل الدخول المؤقت (بناءً على الإيميل)
-      let role: 'artist' | 'client' = 'client';
-      
-      if (email.toLowerCase().includes('artist')) {
-        role = 'artist';
-      } else if (email.toLowerCase().includes('client')) {
-        role = 'client';
-      }
-
-      // حفظ الدور
-      setUserRole(role);
-
-      // توجيه بدون reload كامل (أفضل طريقة)
-      window.location.href = role === 'artist' ? '/dashboard' : '/client-dashboard';
-
-    } catch (err: any) {
-      setError(err.message || 'حدث خطأ أثناء تسجيل الدخول');
-    } finally {
-      setLoading(false);
+    // تسجيل دخول بسيط جدًا للاختبار
+    if (email.toLowerCase().includes('artist')) {
+      setUserRole('artist');
+    } else {
+      setUserRole('client');
     }
-  };
 
-  if (!isLoaded) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin w-10 h-10 border-4 border-red-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-gray-500 font-bold">جاري التحميل...</p>
-        </div>
-      </div>
-    );
-  }
+    // توجيه بسيط
+    setTimeout(() => {
+      window.location.href = '/';
+    }, 500);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6" dir="rtl">
       <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8">
-        <div className="text-center mb-8">
-          <div className="mx-auto w-16 h-16 bg-red-600 rounded-2xl flex items-center justify-center">
-            <span className="text-white text-3xl">🎙️</span>
-          </div>
-          <h1 className="text-3xl font-black mt-6">تسجيل الدخول</h1>
-          <p className="text-gray-500 mt-2">مرحباً بعودتك إلى VoxDub</p>
-        </div>
-
+        <h1 className="text-3xl font-black text-center mb-8">تسجيل الدخول</h1>
+        
         <form onSubmit={handleLogin} className="space-y-6">
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">البريد الإلكتروني</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:border-red-600"
-              placeholder="example@email.com"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">كلمة المرور</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:border-red-600"
-              placeholder="••••••••"
-            />
-          </div>
-
-          {error && (
-            <p className="text-red-600 text-sm font-bold text-center">{error}</p>
-          )}
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="أدخل الإيميل (اكتب artist لو عايز artist)"
+            className="w-full px-4 py-3 border border-gray-300 rounded-2xl"
+            required
+          />
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-red-600 text-white py-3.5 rounded-2xl font-bold text-lg hover:bg-red-700 transition disabled:opacity-70"
+            className="w-full bg-red-600 text-white py-3 rounded-2xl font-bold"
           >
-            {loading ? 'جاري تسجيل الدخول...' : 'تسجيل الدخول'}
+            {loading ? 'جاري الدخول...' : 'دخول'}
           </button>
         </form>
 
-        <div className="text-center mt-6">
-          <p className="text-gray-600">
-            ليس لديك حساب؟{' '}
-            <Link href="/register" className="text-red-600 font-bold hover:underline">
-              إنشاء حساب جديد
-            </Link>
-          </p>
-        </div>
+        <p className="text-center mt-6 text-sm text-gray-500">
+          جرب تكتب "artist" في الإيميل عشان تدخل كمعلق
+        </p>
       </div>
     </div>
   );
