@@ -2,10 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useAuth } from './context/AuthContext';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from './components/firebase';
-
 import {
   Mic2, Play, Pause, Award, Star, Mic,
   Search, MessageSquare, Headphones, FileCheck,
@@ -32,14 +30,10 @@ interface Artist {
 }
 
 export default function Home() {
-  const { isLoaded, userRole } = useAuth();
-
   const [artists, setArtists] = useState<Artist[]>([]);
   const [loadingArtists, setLoadingArtists] = useState(true);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
-
-  console.log("🔥 Auth in Home:", { isLoaded, userRole });
 
   const packages = [
     { name: 'باقة التعليق الصوتي', price: '5000', popular: false, desc: 'مثالية للمشاريع البسيطة', features: ['تعليق صوتي احترافي', 'جودة تسجيل HD', 'تسليم خلال 3 أيام', 'مراجعة واحدة مجانية'] },
@@ -61,13 +55,10 @@ export default function Home() {
         const snapshot = await getDocs(collection(db, 'artists'));
         const data = snapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() } as Artist))
-          .filter((artist: Artist) => {
-            const hasAudio = (artist.audioSamples && artist.audioSamples.length > 0) || !!artist.audio;
-            return artist.name && hasAudio;
-          });
+          .filter(a => a.name);
         setArtists(data);
       } catch (err) {
-        console.error("خطأ في جلب المعلقين:", err);
+        console.error(err);
       } finally {
         setLoadingArtists(false);
       }
@@ -78,7 +69,6 @@ export default function Home() {
   const toggleAudio = (artist: Artist) => {
     const audioUrl = getAudioUrl(artist);
     if (!audioUrl) return;
-
     if (playingId === artist.id) {
       currentAudio?.pause();
       setPlayingId(null);
@@ -91,17 +81,6 @@ export default function Home() {
       newAudio.onended = () => setPlayingId(null);
     }
   };
-
-  if (!isLoaded) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="text-center">
-          <div className="animate-spin w-10 h-10 border-4 border-red-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-gray-500 font-bold">جاري تحميل الموقع...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-white font-sans text-right" dir="rtl">
@@ -182,7 +161,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Artists Section */}
+      {/* Artists */}
       <section id="artists" className="py-24 bg-gray-50">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
@@ -191,21 +170,15 @@ export default function Home() {
           </div>
 
           {loadingArtists ? (
-            <div className="text-center py-20">
-              <div className="animate-spin w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-              <p className="text-gray-500 font-bold">جاري تحميل المعلقين...</p>
-            </div>
+            <div className="text-center py-20 text-gray-400 font-bold">جاري تحميل المعلقين...</div>
           ) : artists.length === 0 ? (
-            <div className="text-center py-20 text-gray-400 font-bold">
-              لا يوجد معلقون معتمدون بعينات صوتية حالياً
-            </div>
+            <div className="text-center py-20 text-gray-400 font-bold">لا يوجد معلقون حالياً</div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {artists.map((artist) => {
                 const audioUrl = getAudioUrl(artist);
                 const hasAudio = !!audioUrl;
                 const isPlaying = playingId === artist.id;
-
                 return (
                   <div key={artist.id} className="bg-gray-900 rounded-3xl p-8 text-white hover:-translate-y-2 transition-transform duration-300">
                     <div className="flex justify-between items-start mb-6">
@@ -269,6 +242,7 @@ export default function Home() {
               })}
             </div>
           )}
+
           <div className="text-center mt-12">
             <Link href="/artists" className="bg-gray-900 text-white px-10 py-4 rounded-full font-black text-lg hover:bg-red-600 transition-all inline-block">
               عرض جميع المعلقين
