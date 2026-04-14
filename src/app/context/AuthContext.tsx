@@ -1,4 +1,4 @@
-'use client';   // ←←← هذا السطر ضروري جدًا
+'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
@@ -8,20 +8,23 @@ interface AuthContextType {
   userRole: Role;
   setUserRole: (role: Role) => void;
   logout: () => void;
+  isLoaded: boolean;          // ← مهم جدًا
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userRole, setRoleState] = useState<Role>('visitor');
+  const [isLoaded, setIsLoaded] = useState(false);   // ← جديد
 
-  // تحميل الدور من localStorage عند أول تحميل
+  // تحميل الدور من localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('userRole');
-      if (saved === 'admin' || saved === 'artist' || saved === 'client') {
-        setRoleState(saved);
+      if (['admin', 'artist', 'client'].includes(saved || '')) {
+        setRoleState(saved as Role);
       }
+      setIsLoaded(true);        // ← مهم: يقول إن الـ auth جاهز
     }
   }, []);
 
@@ -31,12 +34,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
-    localStorage.removeItem('userRole');   // ← أفضل من clear()
+    localStorage.removeItem('userRole');
     setRoleState('visitor');
   };
 
   return (
-    <AuthContext.Provider value={{ userRole, setUserRole, logout }}>
+    <AuthContext.Provider value={{ userRole, setUserRole, logout, isLoaded }}>
       {children}
     </AuthContext.Provider>
   );
