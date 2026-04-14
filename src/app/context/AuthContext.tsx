@@ -1,3 +1,5 @@
+'use client';   // ←←← هذا السطر ضروري جدًا
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 type Role = 'admin' | 'artist' | 'client' | 'visitor';
@@ -13,11 +15,13 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userRole, setRoleState] = useState<Role>('visitor');
 
+  // تحميل الدور من localStorage عند أول تحميل
   useEffect(() => {
-    // نقرأ localStorage فقط في المتصفح
-    const saved = localStorage.getItem('userRole');
-    if (saved === 'admin' || saved === 'artist' || saved === 'client') {
-      setRoleState(saved);
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('userRole');
+      if (saved === 'admin' || saved === 'artist' || saved === 'client') {
+        setRoleState(saved);
+      }
     }
   }, []);
 
@@ -27,7 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
-    localStorage.clear();
+    localStorage.removeItem('userRole');   // ← أفضل من clear()
     setRoleState('visitor');
   };
 
@@ -40,6 +44,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  if (!ctx) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
   return ctx;
 }
