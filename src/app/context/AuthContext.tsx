@@ -1,42 +1,38 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
-type Role = 'admin' | 'artist' | 'visitor';
+type Role = 'admin' | 'artist' | 'client' | 'visitor';
 
 interface AuthContextType {
   userRole: Role;
   setUserRole: (role: Role) => void;
-  login: (user: string, pass: string) => boolean;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [userRole, setRoleState] = useState<Role>(() => {
-    const saved = localStorage.getItem('voxdub_user_role');
-    if (saved === 'admin' || saved === 'artist') return saved;
-    return 'visitor';
-  });
+  const [userRole, setRoleState] = useState<Role>('visitor');
+
+  useEffect(() => {
+    // نقرأ localStorage فقط في المتصفح
+    const saved = localStorage.getItem('userRole');
+    if (saved === 'admin' || saved === 'artist' || saved === 'client') {
+      setRoleState(saved);
+    }
+  }, []);
 
   const setUserRole = (role: Role) => {
-    localStorage.setItem('voxdub_user_role', role);
+    localStorage.setItem('userRole', role);
     setRoleState(role);
   };
 
-  const login = (user: string, pass: string): boolean => {
-    if (user === 'admin2026' && pass === 'admin2026') {
-      setUserRole('admin');
-      return true;
-    }
-    return false;
-  };
-
   const logout = () => {
-    setUserRole('visitor');
+    localStorage.clear();
+    setRoleState('visitor');
   };
 
   return (
-    <AuthContext.Provider value={{ userRole, setUserRole, login, logout }}>
+    <AuthContext.Provider value={{ userRole, setUserRole, logout }}>
       {children}
     </AuthContext.Provider>
   );
