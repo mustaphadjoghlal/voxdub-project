@@ -18,12 +18,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
+    // هذا الـ useEffect يشتغل مرة واحدة فقط بعد تحميل الصفحة في المتصفح
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('userRole');
-      if (['admin', 'artist', 'client'].includes(saved || '')) {
+      if (saved && ['admin', 'artist', 'client'].includes(saved)) {
         setRoleState(saved as Role);
       }
-      setIsLoaded(true);
+      setIsLoaded(true);   // ← مهم جداً: نعلن أن الـ auth جاهز
     }
   }, []);
 
