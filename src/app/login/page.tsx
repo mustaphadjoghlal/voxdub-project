@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../components/firebase';
+import { db, auth } from '../components/firebase';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '../context/AuthContext';
 import Link from 'next/link';
 import { Mic2, LogIn } from 'lucide-react';
 
@@ -14,6 +16,7 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { setUserRole } = useAuth();
 
   useEffect(() => {
     setMounted(true);
@@ -27,44 +30,59 @@ const Login = () => {
 
     // تسجيل دخول المدير
     if (email === 'admin@voxdub.com' && password === 'admin123') {
-      localStorage.setItem('userRole', 'admin');
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+      } catch (_) {
+        // المدير ممكن ما عنده Firebase Auth account، نكمل بـ localStorage
+      }
+      setUserRole('admin');
       localStorage.setItem('userId', 'admin');
       router.push('/dashboard');
+      setLoading(false);
       return;
     }
 
     try {
-      // البحث في المعلقين
+      // تسجيل دخول عبر Firebase Auth
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const uid = userCredential.user.uid;
+
+      // نحدد الـ role من Firestore
       const artistsSnapshot = await getDocs(collection(db, 'artists'));
-      const artists = artistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
-      const artist = artists.find(a => a.email === email && a.password === password);
+      const artist = artistsSnapshot.docs.find(doc => doc.data().email === email);
 
       if (artist) {
-        localStorage.setItem('userRole', 'artist');
+        setUserRole('artist');
         localStorage.setItem('userId', artist.id);
         router.push('/dashboard');
         return;
       }
 
-      // البحث في أصحاب العمل
       const clientsSnapshot = await getDocs(collection(db, 'clients'));
-      const clients = clientsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
-      const client = clients.find(c => c.email === email && c.password === password);
+      const client = clientsSnapshot.docs.find(doc => doc.data().email === email);
 
       if (client) {
-        localStorage.setItem('userRole', 'client');
+        setUserRole('client');
         localStorage.setItem('userId', client.id);
-        localStorage.setItem('userName', client.name);
+        localStorage.setItem('userName', client.data().name || '');
         router.push('/client-dashboard');
         return;
       }
 
-      setError('البريد الإلكتروني أو كلمة المرور غير صحيحة');
+      // مسجل في Firebase لكن مش في artists أو clients
+      setUserRole('client');
+      localStorage.setItem('userId', uid);
+      router.push('/client-dashboard');
 
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError('حدث خطأ أثناء تسجيل الدخول.');
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setError('البريد الإلكتروني أو كلمة المرور غير صحيحة');
+      } else {
+        setError('حدث خطأ أثناء تسجيل الدخول.');
+      }
     }
+
     setLoading(false);
   };
 
