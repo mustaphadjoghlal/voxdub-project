@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from './components/firebase';
+import { useAuth } from './context/AuthContext';
 import {
   Mic2, Play, Pause, Award, Star, Mic,
   Search, MessageSquare, Headphones, FileCheck,
-  CheckCircle2
+  CheckCircle2, Bell, Mail, User, LogOut, LayoutDashboard
 } from 'lucide-react';
 
 interface AudioSample {
@@ -27,13 +28,18 @@ interface Artist {
   profilePicture?: string;
   audioSamples?: AudioSample[] | string[];
   audio?: string;
+  uid?: string;
 }
 
 export default function Home() {
+  const { userRole, user, logout } = useAuth();
   const [artists, setArtists] = useState<Artist[]>([]);
   const [loadingArtists, setLoadingArtists] = useState(true);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
+  const [loggedInArtist, setLoggedInArtist] = useState<Artist | null>(null);
+  const [loggedInArtistDocId, setLoggedInArtistDocId] = useState<string | null>(null);
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   const packages = [
     { name: 'باقة التعليق الصوتي', price: '5000', popular: false, desc: 'مثالية للمشاريع البسيطة', features: ['تعليق صوتي احترافي', 'جودة تسجيل HD', 'تسليم خلال 3 أيام', 'مراجعة واحدة مجانية'] },
@@ -45,10 +51,11 @@ export default function Home() {
     if (!artist.audioSamples || artist.audioSamples.length === 0) return artist.audio || null;
     const first = artist.audioSamples[0];
     if (typeof first === 'string') return first;
-    if (typeof first === 'object' && 'url' in first) return first.url;
+    if (typeof first === 'object' && 'url' in first) return (first as AudioSample).url;
     return artist.audio || null;
   };
 
+  // جلب المعلقين
   useEffect(() => {
     const fetchArtists = async () => {
       try {
@@ -66,6 +73,28 @@ export default function Home() {
     fetchArtists();
   }, []);
 
+  // جلب بيانات المعلق المسجل
+  useEffect(() => {
+    const fetchLoggedInArtist = async () => {
+      if (userRole !== 'artist') {
+        setLoggedInArtist(null);
+        return;
+      }
+      const userId = localStorage.getItem('userId');
+      if (!userId) return;
+      try {
+        const docSnap = await getDoc(doc(db, 'artists', userId));
+        if (docSnap.exists()) {
+          setLoggedInArtist({ id: docSnap.id, ...docSnap.data() } as Artist);
+          setLoggedInArtistDocId(docSnap.id);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchLoggedInArtist();
+  }, [userRole]);
+
   const toggleAudio = (artist: Artist) => {
     const audioUrl = getAudioUrl(artist);
     if (!audioUrl) return;
@@ -82,6 +111,15 @@ export default function Home() {
     }
   };
 
+  const handleLogout = async () => {
+    await logout();
+    setShowUserMenu(false);
+    setLoggedInArtist(null);
+  };
+
+  // هل الكارت هو المعلق المسجل؟
+  const isCurrentArtist = (artistId: string) => loggedInArtistDocId === artistId;
+
   return (
     <div className="min-h-screen bg-white font-sans text-right" dir="rtl">
       <style>{`
@@ -89,7 +127,7 @@ export default function Home() {
         * { font-family: 'Cairo', sans-serif; }
       `}</style>
 
-      {/* Navbar */}
+      {/* ===== Navbar ===== */}
       <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-gray-100 h-20 flex items-center">
         <div className="max-w-7xl mx-auto px-6 w-full flex justify-between items-center">
           <div className="flex items-center gap-2">
@@ -98,16 +136,157 @@ export default function Home() {
             </div>
             <span className="text-2xl font-black">Vox<span className="text-red-600">Dub</span></span>
           </div>
+
           <div className="flex items-center gap-3">
             <a href="#artists" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">المعلقون</a>
             <a href="#pricing" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">الباقات</a>
-            <Link href="/login" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">دخول</Link>
-            <Link href="/register" className="bg-red-600 text-white font-bold py-2 px-6 rounded-full hover:bg-red-700 transition">
-              انضم إلينا
-            </Link>
+
+            {/* ===== زائر ===== */}
+            {userRole === 'visitor' && (
+              <>
+                <Link href="/login" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">دخول</Link>
+                <Link href="/register" className="bg-red-600 text-white font-bold py-2 px-6 rounded-full hover:bg-red-700 transition">
+                  انضم إلينا
+                </Link>
+              </>
+            )}
+
+            {/* ===== معلق صوتي ===== */}
+            {userRole === 'artist' && loggedInArtist && (
+              <div className="flex items-center gap-3">
+                {/* ترحيب */}
+                <span className="text-gray-700 font-black hidden md:block">
+                  مرحباً، <span className="text-red-600">{loggedInArtist.name?.split(' ')[0]}</span> 👋
+                </span>
+
+                {/* الإشعارات */}
+                <button className="relative w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition">
+                  <Bell size={18} className="text-gray-600" />
+                  <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-600 rounded-full border-2 border-white"></span>
+                </button>
+
+                {/* الرسائل */}
+                <button className="relative w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition">
+                  <Mail size={18} className="text-gray-600" />
+                </button>
+
+                {/* قائمة المستخدم */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowUserMenu(!showUserMenu)}
+                    className="flex items-center gap-2 bg-gray-900 text-white py-2 px-4 rounded-full font-black text-sm hover:bg-red-600 transition"
+                  >
+                    <div className="w-6 h-6 rounded-full overflow-hidden bg-gray-600 flex-shrink-0">
+                      {loggedInArtist.profilePicture ? (
+                        <img src={loggedInArtist.profilePicture} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-xs font-black">
+                          {loggedInArtist.name?.[0]}
+                        </div>
+                      )}
+                    </div>
+                    حسابي
+                  </button>
+
+                  {showUserMenu && (
+                    <div className="absolute left-0 top-14 bg-white rounded-2xl shadow-xl border border-gray-100 w-52 overflow-hidden z-50">
+                      <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+                        <p className="font-black text-gray-900 text-sm">{loggedInArtist.name}</p>
+                        <p className="text-gray-400 text-xs font-bold">{loggedInArtist.voiceType}</p>
+                      </div>
+                      <Link
+                        href={`/artists/${loggedInArtistDocId}`}
+                        onClick={() => setShowUserMenu(false)}
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-gray-700 font-bold text-sm"
+                      >
+                        <User size={16} className="text-red-600" />
+                        ملفي الشخصي
+                      </Link>
+                      <Link
+                        href="/dashboard"
+                        onClick={() => setShowUserMenu(false)}
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-gray-700 font-bold text-sm"
+                      >
+                        <LayoutDashboard size={16} className="text-red-600" />
+                        لوحة التحكم
+                      </Link>
+                      <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50 transition text-red-600 font-bold text-sm border-t border-gray-100"
+                      >
+                        <LogOut size={16} />
+                        تسجيل الخروج
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ===== عميل ===== */}
+            {userRole === 'client' && (
+              <div className="flex items-center gap-3">
+                <span className="text-gray-700 font-black hidden md:block">
+                  مرحباً 👋
+                </span>
+                <button className="relative w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition">
+                  <Bell size={18} className="text-gray-600" />
+                </button>
+                <button className="relative w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition">
+                  <Mail size={18} className="text-gray-600" />
+                </button>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowUserMenu(!showUserMenu)}
+                    className="flex items-center gap-2 bg-gray-900 text-white py-2 px-4 rounded-full font-black text-sm hover:bg-red-600 transition"
+                  >
+                    <User size={16} />
+                    حسابي
+                  </button>
+                  {showUserMenu && (
+                    <div className="absolute left-0 top-14 bg-white rounded-2xl shadow-xl border border-gray-100 w-48 overflow-hidden z-50">
+                      <Link
+                        href="/client-dashboard"
+                        onClick={() => setShowUserMenu(false)}
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-gray-700 font-bold text-sm"
+                      >
+                        <LayoutDashboard size={16} className="text-red-600" />
+                        لوحة التحكم
+                      </Link>
+                      <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50 transition text-red-600 font-bold text-sm border-t border-gray-100"
+                      >
+                        <LogOut size={16} />
+                        تسجيل الخروج
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ===== مدير ===== */}
+            {userRole === 'admin' && (
+              <div className="flex items-center gap-3">
+                <Link href="/dashboard" className="bg-gray-900 text-white font-bold py-2 px-5 rounded-full hover:bg-red-600 transition text-sm flex items-center gap-2">
+                  <LayoutDashboard size={16} />
+                  لوحة المديرة
+                </Link>
+                <button onClick={handleLogout} className="text-gray-500 font-bold text-sm hover:text-red-600 transition flex items-center gap-1">
+                  <LogOut size={16} />
+                  خروج
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </nav>
+
+      {/* إغلاق القائمة عند الضغط خارجها */}
+      {showUserMenu && (
+        <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
+      )}
 
       {/* Hero */}
       <section className="pt-28 pb-40 px-6 text-center bg-white">
@@ -124,9 +303,11 @@ export default function Home() {
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <a href="#artists" className="bg-gray-900 text-white px-10 py-4 rounded-full font-black text-lg hover:bg-red-600 transition-all">اكتشف المعلقين</a>
-            <Link href="/register" className="bg-white text-gray-900 border-2 border-gray-200 px-10 py-4 rounded-full font-black text-lg hover:border-red-600 hover:text-red-600 transition-all">
-              انضم إلينا
-            </Link>
+            {userRole === 'visitor' && (
+              <Link href="/register" className="bg-white text-gray-900 border-2 border-gray-200 px-10 py-4 rounded-full font-black text-lg hover:border-red-600 hover:text-red-600 transition-all">
+                انضم إلينا
+              </Link>
+            )}
           </div>
           <div className="mt-16 flex justify-center gap-12 text-center">
             {[['50+', 'معلق محترف'], ['500+', 'مشروع منجز'], ['100%', 'رضا العملاء']].map(([num, label]) => (
@@ -179,10 +360,20 @@ export default function Home() {
                 const audioUrl = getAudioUrl(artist);
                 const hasAudio = !!audioUrl;
                 const isPlaying = playingId === artist.id;
+                const isMine = isCurrentArtist(artist.id);
+
                 return (
-                  <div key={artist.id} className="bg-gray-900 rounded-3xl p-8 text-white hover:-translate-y-2 transition-transform duration-300">
+                  <div key={artist.id} className={`rounded-3xl p-8 text-white hover:-translate-y-2 transition-transform duration-300 relative ${isMine ? 'bg-red-700 ring-4 ring-red-400' : 'bg-gray-900'}`}>
+
+                    {/* شارة "أنت" للمعلق المسجل */}
+                    {isMine && (
+                      <div className="absolute -top-3 -right-3 bg-red-500 text-white text-xs font-black px-3 py-1 rounded-full border-2 border-white shadow-lg">
+                        ملفك الشخصي ✨
+                      </div>
+                    )}
+
                     <div className="flex justify-between items-start mb-6">
-                      <Award size={22} className="text-red-400 opacity-60 flex-shrink-0" />
+                      <Award size={22} className={`${isMine ? 'text-yellow-300' : 'text-red-400'} opacity-60 flex-shrink-0`} />
                       <div className="text-right flex-1 mr-3">
                         <button
                           onClick={() => toggleAudio(artist)}
@@ -231,12 +422,22 @@ export default function Home() {
                       </div>
                     </div>
 
-                    <Link
-                      href={`/artists/${artist.id}`}
-                      className="w-full py-3 rounded-2xl font-bold text-center block border border-white/20 text-gray-300 hover:bg-white hover:text-gray-900 transition-all text-sm"
-                    >
-                      الملف الشخصي
-                    </Link>
+                    {/* زر مختلف للمعلق المسجل */}
+                    {isMine ? (
+                      <Link
+                        href={`/artists/${artist.id}`}
+                        className="w-full py-3 rounded-2xl font-bold text-center block bg-white text-red-700 hover:bg-red-50 transition-all text-sm"
+                      >
+                        عرض ملفي الشخصي ←
+                      </Link>
+                    ) : (
+                      <Link
+                        href={`/artists/${artist.id}`}
+                        className="w-full py-3 rounded-2xl font-bold text-center block border border-white/20 text-gray-300 hover:bg-white hover:text-gray-900 transition-all text-sm"
+                      >
+                        الملف الشخصي
+                      </Link>
+                    )}
                   </div>
                 );
               })}
@@ -301,7 +502,7 @@ export default function Home() {
                   ))}
                 </ul>
                 <Link
-                  href="/register"
+                  href={userRole === 'visitor' ? '/register' : '/client-dashboard'}
                   className={`w-full py-3 rounded-2xl block text-center font-black transition-all ${plan.popular ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-gray-900 text-white hover:bg-gray-700'}`}
                 >
                   ابدأ الآن
@@ -318,12 +519,20 @@ export default function Home() {
           <h2 className="text-4xl font-black mb-6">هل أنت مستعد؟</h2>
           <p className="text-gray-400 font-bold mb-10 text-lg">انضم إلى VoxDub اليوم — سواء كنت معلقاً صوتياً أو صاحب مشروع</p>
           <div className="flex flex-wrap justify-center gap-4">
-            <Link href="/register" className="bg-red-600 text-white px-10 py-4 rounded-full font-black text-lg hover:bg-red-700 transition-all">
-              انضم إلينا
-            </Link>
-            <Link href="/login" className="bg-white text-gray-900 px-10 py-4 rounded-full font-black text-lg hover:bg-gray-100 transition-all">
-              تسجيل الدخول
-            </Link>
+            {userRole === 'visitor' ? (
+              <>
+                <Link href="/register" className="bg-red-600 text-white px-10 py-4 rounded-full font-black text-lg hover:bg-red-700 transition-all">
+                  انضم إلينا
+                </Link>
+                <Link href="/login" className="bg-white text-gray-900 px-10 py-4 rounded-full font-black text-lg hover:bg-gray-100 transition-all">
+                  تسجيل الدخول
+                </Link>
+              </>
+            ) : (
+              <Link href="/dashboard" className="bg-red-600 text-white px-10 py-4 rounded-full font-black text-lg hover:bg-red-700 transition-all">
+                اذهب إلى لوحة التحكم
+              </Link>
+            )}
           </div>
         </div>
       </section>
@@ -334,8 +543,14 @@ export default function Home() {
         <p className="text-gray-500 font-bold text-sm">إدارة وتأسيس: لميس حميمي © 2026 — جميع الحقوق محفوظة</p>
         <div className="flex justify-center gap-8 mt-8">
           <a href="#artists" className="text-gray-400 hover:text-white font-bold text-sm transition">المعلقون</a>
-          <Link href="/login" className="text-gray-400 hover:text-white font-bold text-sm transition">تسجيل الدخول</Link>
-          <Link href="/register" className="text-gray-400 hover:text-white font-bold text-sm transition">انضم إلينا</Link>
+          {userRole === 'visitor' ? (
+            <>
+              <Link href="/login" className="text-gray-400 hover:text-white font-bold text-sm transition">تسجيل الدخول</Link>
+              <Link href="/register" className="text-gray-400 hover:text-white font-bold text-sm transition">انضم إلينا</Link>
+            </>
+          ) : (
+            <Link href="/dashboard" className="text-gray-400 hover:text-white font-bold text-sm transition">لوحة التحكم</Link>
+          )}
         </div>
       </footer>
     </div>
