@@ -29,6 +29,7 @@ interface Artist {
   audioSamples?: AudioSample[] | string[];
   audio?: string;
   uid?: string;
+  voiceType?: string;
 }
 
 export default function Home() {
@@ -192,7 +193,7 @@ export default function Home() {
                     <div className="absolute left-0 top-14 bg-white rounded-2xl shadow-xl border border-gray-100 w-52 overflow-hidden z-50">
                       <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
                         <p className="font-black text-gray-900 text-sm">{loggedInArtist.name}</p>
-                        <p className="text-gray-400 text-xs font-bold">{loggedInArtist.voiceType}</p>
+                        <p className="text-gray-400 text-xs font-bold">{loggedInArtist.voiceType || 'معلق صوتي'}</p>
                       </div>
                       <Link
                         href={`/artists/${loggedInArtistDocId}`}
