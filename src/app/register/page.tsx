@@ -6,7 +6,7 @@ import { collection, addDoc } from 'firebase/firestore';
 import { db, auth } from '../components/firebase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Mic2, Mic, Briefcase, ArrowRight } from 'lucide-react';
+import { Mic2, Mic, Briefcase, ArrowRight, Check } from 'lucide-react';
 
 const Register = () => {
   const [step, setStep] = useState<'choose' | 'form'>('choose');
@@ -15,11 +15,29 @@ const Register = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [gender, setGender] = useState('ذكر');
-  const [voiceType, setVoiceType] = useState('رخيم');
+  
+  // 1. تغيير الحالة لتكون مصفوفة بدلاً من نص
+  const [voiceType, setVoiceType] = useState<string[]>([]);
+  
   const [tagline, setTagline] = useState('');
   const [bio, setBio] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  // مصفوفة الخيارات الجديدة
+  const performanceOptions = [
+    "وثائقي", "إعلاني", "إخباري", "كتب صوتية", 
+    "دوبلاج", "شعر وخواطر", "رسمي", "رد آلي"
+  ];
+
+  // دالة لإضافة أو إزالة الأداء من المصفوفة
+  const toggleVoiceType = (type: string) => {
+    if (voiceType.includes(type)) {
+      setVoiceType(voiceType.filter(t => t !== type));
+    } else {
+      setVoiceType([...voiceType, type]);
+    }
+  };
 
   const [clientName, setClientName] = useState('');
   const [clientEmail, setClientEmail] = useState('');
@@ -43,6 +61,13 @@ const Register = () => {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    // تحقق إضافي للمعلق الصوتي
+    if (userType === 'artist' && voiceType.length === 0) {
+      setError('يرجى اختيار أداء صوتي واحد على الأقل');
+      return;
+    }
+
     setLoading(true);
 
     const currentEmail = userType === 'artist' ? email : clientEmail;
@@ -54,7 +79,6 @@ const Register = () => {
     if (currentPassword !== currentConfirm) { setError('كلمات المرور غير متطابقة'); setLoading(false); return; }
 
     try {
-      // إنشاء حساب في Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(auth, currentEmail, currentPassword);
       const uid = userCredential.user.uid;
 
@@ -64,7 +88,7 @@ const Register = () => {
           name,
           email,
           gender,
-          voiceType,
+          voiceType, // سيتم تخزينها كمصفوفة في Firestore
           tagline,
           bio,
           role: 'artist',
@@ -91,11 +115,8 @@ const Register = () => {
     } catch (err: any) {
       if (err.code === 'auth/email-already-in-use') {
         setError('هذا البريد الإلكتروني مسجل مسبقاً');
-      } else if (err.code === 'auth/weak-password') {
-        setError('كلمة المرور ضعيفة جداً');
       } else {
         setError('حدث خطأ أثناء التسجيل.');
-        console.error(err);
       }
     }
     setLoading(false);
@@ -177,20 +198,39 @@ const Register = () => {
                   <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors"
                     placeholder="البريد الإلكتروني *" />
-                  <div className="grid grid-cols-2 gap-4">
-                    <select value={gender} onChange={e => setGender(e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm">
-                      <option value="ذكر">ذكر</option>
-                      <option value="أنثى">أنثى</option>
-                    </select>
-                    <select value={voiceType} onChange={e => setVoiceType(e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm">
-                      <option value="رخيم">رخيم</option>
-                      <option value="ناعم">ناعم</option>
-                      <option value="إعلاني">إعلاني</option>
-                      <option value="وثائقي">وثائقي</option>
-                    </select>
+                  
+                  <div className="space-y-3">
+                    <label className="block text-sm font-black text-gray-700">الجنس:</label>
+                    <div className="flex gap-4">
+                      {['ذكر', 'أنثى'].map((g) => (
+                        <button key={g} type="button" onClick={() => setGender(g)}
+                          className={`flex-1 py-3 rounded-xl border font-bold text-sm transition-all ${gender === g ? 'bg-red-600 text-white border-red-600 shadow-md' : 'bg-white text-gray-500 border-gray-200'}`}>
+                          {g}
+                        </button>
+                      ))}
+                    </div>
                   </div>
+
+                  <div className="space-y-3">
+                    <label className="block text-sm font-black text-gray-700">الأداءات الصوتية المفضلّة (اختر واحدة أو أكثر):</label>
+                    <div className="flex flex-wrap gap-2">
+                      {performanceOptions.map((opt) => (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => toggleVoiceType(opt)}
+                          className={`px-4 py-2 rounded-full border text-xs font-bold transition-all flex items-center gap-2
+                            ${voiceType.includes(opt) 
+                              ? 'bg-red-600 text-white border-red-600' 
+                              : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-red-300'}`}
+                        >
+                          {opt}
+                          {voiceType.includes(opt) && <Check size={14} />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <input type="text" value={tagline} onChange={e => setTagline(e.target.value)}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors"
                     placeholder="Tagline — جملة قصيرة تعبر عنك" />
@@ -199,7 +239,7 @@ const Register = () => {
                     placeholder="نبذة عنك" />
                   <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors"
-                    placeholder="كلمة المرور (لاتينية + أرقام، 6 أحرف على الأقل) *" />
+                    placeholder="كلمة المرور *" />
                   <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors"
                     placeholder="تأكيد كلمة المرور *" />
@@ -220,7 +260,7 @@ const Register = () => {
                     placeholder="رقم الهاتف (اختياري)" />
                   <input type="password" value={clientPassword} onChange={e => setClientPassword(e.target.value)} required
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors"
-                    placeholder="كلمة المرور (لاتينية + أرقام، 6 أحرف على الأقل) *" />
+                    placeholder="كلمة المرور *" />
                   <input type="password" value={clientConfirmPassword} onChange={e => setClientConfirmPassword(e.target.value)} required
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors"
                     placeholder="تأكيد كلمة المرور *" />
