@@ -15,22 +15,17 @@ const Register = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [gender, setGender] = useState('ذكر');
-  
-  // 1. تغيير الحالة لتكون مصفوفة بدلاً من نص
   const [voiceType, setVoiceType] = useState<string[]>([]);
-  
   const [tagline, setTagline] = useState('');
   const [bio, setBio] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
-  // مصفوفة الخيارات الجديدة
   const performanceOptions = [
     "وثائقي", "إعلاني", "إخباري", "كتب صوتية", 
     "دوبلاج", "شعر وخواطر", "رسمي", "رد آلي"
   ];
 
-  // دالة لإضافة أو إزالة الأداء من المصفوفة
   const toggleVoiceType = (type: string) => {
     if (voiceType.includes(type)) {
       setVoiceType(voiceType.filter(t => t !== type));
@@ -62,7 +57,6 @@ const Register = () => {
     e.preventDefault();
     setError('');
 
-    // تحقق إضافي للمعلق الصوتي
     if (userType === 'artist' && voiceType.length === 0) {
       setError('يرجى اختيار أداء صوتي واحد على الأقل');
       return;
@@ -88,7 +82,7 @@ const Register = () => {
           name,
           email,
           gender,
-          voiceType, // سيتم تخزينها كمصفوفة في Firestore
+          voiceType,
           tagline,
           bio,
           role: 'artist',
@@ -192,10 +186,13 @@ const Register = () => {
             <form onSubmit={handleRegister} className="space-y-4">
               {userType === 'artist' ? (
                 <>
-                  <input type="text" value={name} onChange={e => setName(e.target.value)} required
+                  <input type="text" name="full_name" value={name} onChange={e => setName(e.target.value)} required
+                    autoComplete="name"
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors"
                     placeholder="الاسم الكامل *" />
-                  <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
+                  
+                  <input type="email" name="email" value={email} onChange={e => setEmail(e.target.value)} required
+                    autoComplete="email"
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors"
                     placeholder="البريد الإلكتروني *" />
                   
@@ -231,37 +228,56 @@ const Register = () => {
                     </div>
                   </div>
 
-                  <input type="text" value={tagline} onChange={e => setTagline(e.target.value)}
+                  {/* حقل التاغ لاين مع تعطيل التعبئة التلقائية */}
+                  <input type="text" name="user_tagline" value={tagline} onChange={e => setTagline(e.target.value)}
+                    autoComplete="off"
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors"
                     placeholder="Tagline — جملة قصيرة تعبر عنك" />
-                  <textarea value={bio} onChange={e => setBio(e.target.value)} rows={3}
+                  
+                  <textarea name="user_bio" value={bio} onChange={e => setBio(e.target.value)} rows={3}
+                    autoComplete="off"
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors resize-none"
                     placeholder="نبذة عنك" />
-                  <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
+                  
+                  <input type="password" name="new-password" value={password} onChange={e => setPassword(e.target.value)} required
+                    autoComplete="new-password"
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors"
                     placeholder="كلمة المرور *" />
-                  <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required
+                  
+                  <input type="password" name="confirm-password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required
+                    autoComplete="new-password"
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors"
                     placeholder="تأكيد كلمة المرور *" />
                 </>
               ) : (
                 <>
-                  <input type="text" value={clientName} onChange={e => setClientName(e.target.value)} required
+                  <input type="text" name="client_name" value={clientName} onChange={e => setClientName(e.target.value)} required
+                    autoComplete="name"
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors"
                     placeholder="الاسم الكامل *" />
-                  <input type="email" value={clientEmail} onChange={e => setClientEmail(e.target.value)} required
+                  
+                  <input type="email" name="client_email" value={clientEmail} onChange={e => setClientEmail(e.target.value)} required
+                    autoComplete="email"
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors"
                     placeholder="البريد الإلكتروني *" />
-                  <input type="text" value={company} onChange={e => setCompany(e.target.value)}
+                  
+                  <input type="text" name="company" value={company} onChange={e => setCompany(e.target.value)}
+                    autoComplete="organization"
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors"
                     placeholder="اسم الشركة (اختياري)" />
-                  <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
+                  
+                  <input type="tel" name="phone" value={phone} onChange={e => setPhone(e.target.value)}
+                    autoComplete="tel"
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors"
                     placeholder="رقم الهاتف (اختياري)" />
-                  <input type="password" value={clientPassword} onChange={e => setClientPassword(e.target.value)} required
+                  
+                  <input type="password" name="new-password" value={clientPassword} onChange={e => setClientPassword(e.target.value)} required
+                    autoComplete="new-password"
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors"
                     placeholder="كلمة المرور *" />
-                  <input type="password" value={clientConfirmPassword} onChange={e => setClientConfirmPassword(e.target.value)} required
+                  
+                  <input type="password" name="confirm-password" value={clientConfirmPassword} onChange={e => setConfirmPassword(e.target.value)} required
+                    autoComplete="new-password"
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors"
                     placeholder="تأكيد كلمة المرور *" />
                 </>
