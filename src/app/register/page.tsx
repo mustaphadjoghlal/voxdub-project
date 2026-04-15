@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { collection, addDoc } from 'firebase/firestore';
-import { db } from '../components/firebase';
+import { db, auth } from '../components/firebase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Mic2, Mic, Briefcase, ArrowRight } from 'lucide-react';
@@ -39,61 +40,62 @@ const Register = () => {
     return null;
   };
 
-  const handleChoose = (type: 'artist' | 'client') => {
-    setUserType(type);
-    setStep('form');
-  };
-
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    if (userType === 'artist') {
-      const pwdError = validatePassword(password);
-      if (pwdError) { setError(pwdError); setLoading(false); return; }
-      if (password !== confirmPassword) { setError('كلمات المرور غير متطابقة'); setLoading(false); return; }
+    const currentEmail = userType === 'artist' ? email : clientEmail;
+    const currentPassword = userType === 'artist' ? password : clientPassword;
+    const currentConfirm = userType === 'artist' ? confirmPassword : clientConfirmPassword;
 
-      try {
+    const pwdError = validatePassword(currentPassword);
+    if (pwdError) { setError(pwdError); setLoading(false); return; }
+    if (currentPassword !== currentConfirm) { setError('كلمات المرور غير متطابقة'); setLoading(false); return; }
+
+    try {
+      // إنشاء حساب في Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, currentEmail, currentPassword);
+      const uid = userCredential.user.uid;
+
+      if (userType === 'artist') {
         await addDoc(collection(db, 'artists'), {
+          uid,
           name,
           email,
           gender,
           voiceType,
           tagline,
           bio,
-          password,
           role: 'artist',
           approved: true,
           profilePicture: '',
           audioSamples: [],
           createdAt: new Date().toISOString()
         });
-        setSuccess(true);
-        setTimeout(() => router.push('/login'), 2000);
-      } catch (err) {
-        setError('حدث خطأ أثناء التسجيل.');
-      }
-
-    } else {
-      const pwdError = validatePassword(clientPassword);
-      if (pwdError) { setError(pwdError); setLoading(false); return; }
-      if (clientPassword !== clientConfirmPassword) { setError('كلمات المرور غير متطابقة'); setLoading(false); return; }
-
-      try {
+      } else {
         await addDoc(collection(db, 'clients'), {
+          uid,
           name: clientName,
           email: clientEmail,
           company,
           phone,
-          password: clientPassword,
           role: 'client',
           createdAt: new Date().toISOString()
         });
-        setSuccess(true);
-        setTimeout(() => router.push('/login'), 2000);
-      } catch (err) {
+      }
+
+      setSuccess(true);
+      setTimeout(() => router.push('/login'), 2000);
+
+    } catch (err: any) {
+      if (err.code === 'auth/email-already-in-use') {
+        setError('هذا البريد الإلكتروني مسجل مسبقاً');
+      } else if (err.code === 'auth/weak-password') {
+        setError('كلمة المرور ضعيفة جداً');
+      } else {
         setError('حدث خطأ أثناء التسجيل.');
+        console.error(err);
       }
     }
     setLoading(false);
@@ -129,9 +131,8 @@ const Register = () => {
           <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100">
             <h2 className="text-2xl font-black text-gray-900 text-center mb-2">انضم إلى VoxDub</h2>
             <p className="text-gray-500 font-bold text-center mb-8">اختر نوع حسابك</p>
-
             <div className="grid grid-cols-2 gap-4">
-              <button onClick={() => handleChoose('artist')}
+              <button onClick={() => { setUserType('artist'); setStep('form'); }}
                 className="group p-8 rounded-2xl border-2 border-gray-100 hover:border-red-600 hover:bg-red-50 transition-all text-center">
                 <div className="w-16 h-16 bg-gray-100 group-hover:bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4 transition-all">
                   <Mic size={32} className="text-gray-400 group-hover:text-red-600 transition-colors" />
@@ -139,8 +140,7 @@ const Register = () => {
                 <h3 className="text-lg font-black text-gray-900 mb-2">معلق صوتي</h3>
                 <p className="text-gray-400 font-bold text-sm">أنا معلق صوتي محترف وأريد عرض خدماتي</p>
               </button>
-
-              <button onClick={() => handleChoose('client')}
+              <button onClick={() => { setUserType('client'); setStep('form'); }}
                 className="group p-8 rounded-2xl border-2 border-gray-100 hover:border-red-600 hover:bg-red-50 transition-all text-center">
                 <div className="w-16 h-16 bg-gray-100 group-hover:bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4 transition-all">
                   <Briefcase size={32} className="text-gray-400 group-hover:text-red-600 transition-colors" />
@@ -149,7 +149,6 @@ const Register = () => {
                 <p className="text-gray-400 font-bold text-sm">أريد الاستعانة بمعلق صوتي لمشروعي</p>
               </button>
             </div>
-
             <div className="mt-6 text-center">
               <p className="text-gray-500 font-bold text-sm">لديك حساب بالفعل؟</p>
               <Link href="/login" className="text-red-600 font-black hover:underline">تسجيل الدخول</Link>
@@ -163,16 +162,12 @@ const Register = () => {
               className="flex items-center gap-2 text-gray-500 font-bold hover:text-red-600 transition mb-6">
               <ArrowRight size={18} /> رجوع
             </button>
-
             <h2 className="text-2xl font-black text-gray-900 mb-1">
               {userType === 'artist' ? 'تسجيل معلق صوتي' : 'تسجيل صاحب عمل'}
             </h2>
             <p className="text-gray-400 font-bold text-sm mb-6">
-              {userType === 'artist'
-                ? 'أنشئ حسابك وابدأ عرض خدماتك فوراً'
-                : 'أنشئ حسابك وابدأ طلب خدماتك'}
+              {userType === 'artist' ? 'أنشئ حسابك وابدأ عرض خدماتك فوراً' : 'أنشئ حسابك وابدأ طلب خدماتك'}
             </p>
-
             <form onSubmit={handleRegister} className="space-y-4">
               {userType === 'artist' ? (
                 <>
@@ -198,10 +193,10 @@ const Register = () => {
                   </div>
                   <input type="text" value={tagline} onChange={e => setTagline(e.target.value)}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors"
-                    placeholder="Tagline — جملة قصيرة تعبر عنك (مثال: صوت يصنع الفارق)" />
-                  <textarea value={bio} onChange={e => setBio(e.target.value)} rows={4}
+                    placeholder="Tagline — جملة قصيرة تعبر عنك" />
+                  <textarea value={bio} onChange={e => setBio(e.target.value)} rows={3}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors resize-none"
-                    placeholder="نبذة عنك — اكتب سيرتك الذاتية باختصار" />
+                    placeholder="نبذة عنك" />
                   <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors"
                     placeholder="كلمة المرور (لاتينية + أرقام، 6 أحرف على الأقل) *" />
@@ -219,7 +214,7 @@ const Register = () => {
                     placeholder="البريد الإلكتروني *" />
                   <input type="text" value={company} onChange={e => setCompany(e.target.value)}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors"
-                    placeholder="اسم الشركة أو المؤسسة (اختياري)" />
+                    placeholder="اسم الشركة (اختياري)" />
                   <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition-colors"
                     placeholder="رقم الهاتف (اختياري)" />
@@ -231,13 +226,11 @@ const Register = () => {
                     placeholder="تأكيد كلمة المرور *" />
                 </>
               )}
-
               {error && (
                 <div className="bg-red-50 border border-red-100 text-red-600 text-sm font-bold text-center py-3 px-4 rounded-xl">
                   {error}
                 </div>
               )}
-
               <button type="submit" disabled={loading}
                 className="w-full bg-red-600 text-white py-4 rounded-2xl font-black text-lg hover:bg-gray-900 disabled:bg-gray-200 transition-all">
                 {loading ? 'جاري التسجيل...' : 'إنشاء الحساب'}
