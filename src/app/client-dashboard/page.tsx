@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, serverTimestamp, query, where } from 'firebase/firestore';
 import { db, app } from '../components/firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { useAuth } from '../context/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -43,6 +44,7 @@ const packagesDetails = [
 ];
 
 export default function ClientDashboard() {
+  const { logout } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,40 +76,24 @@ export default function ClientDashboard() {
 
   useEffect(() => {
     if (!mounted) return;
-
     const role = localStorage.getItem('userRole');
     const id = localStorage.getItem('userId');
     const name = localStorage.getItem('userName');
-
-    if (!id || role !== 'client') {
-      router.push('/login');
-      return;
-    }
-
+    if (!id || role !== 'client') { router.push('/login'); return; }
     setUserId(id);
     setUserName(name || 'صاحب عمل');
 
     const fetchData = async () => {
       try {
         const ordersSnapshot = await getDocs(collection(db, 'orders'));
-        const allOrders = ordersSnapshot.docs.map(doc => ({
-          id: doc.id, ...doc.data()
-        })) as Order[];
+        const allOrders = ordersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Order[];
         setOrders(allOrders.filter((o: any) => o.clientId === id));
 
-        // جلب كل المعلقين بدون فلتر approved
         const artistsSnapshot = await getDocs(collection(db, 'artists'));
-        const allArtists = artistsSnapshot.docs
-          .map(doc => ({ id: doc.id, ...doc.data() as any }))
-          .filter(a => a.name); // فقط من عنده اسم
-        setArtists(allArtists);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
+        setArtists(artistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any })).filter(a => a.name));
+      } catch (err) { console.error(err); }
+      finally { setLoading(false); }
     };
-
     fetchData();
   }, [mounted, router]);
 
@@ -144,12 +130,38 @@ export default function ClientDashboard() {
       const docRef = await addDoc(collection(db, 'orders'), newOrder);
       setOrders(prev => [...prev, { id: docRef.id, ...newOrder } as any]);
 
-      setSelectedPackage('');
-      setSelectedVoiceActor('');
-      setWorkType('');
-      setDescription('');
-      setAttachedFile(null);
-      setShowForm(false);
+      // إشعار للمديرة
+      await addDoc(collection(db, 'notifications'), {
+        artistId: 'admin',
+        title: '📋 طلب عمل جديد',
+        body: `${userName} طلب ${selectedPackage} — المعلق: ${selectedVoiceActor} — ${workType}`,
+        type: 'new_order',
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+
+      // إشعار للمعلق المختار
+      if (selectedVoiceActor !== 'اختيار الأنسب من طرفكم') {
+        try {
+          const artistsSnap = await getDocs(
+            query(collection(db, 'artists'), where('name', '==', selectedVoiceActor))
+          );
+          if (!artistsSnap.empty) {
+            await addDoc(collection(db, 'notifications'), {
+              artistId: artistsSnap.docs[0].id,
+              title: '🎯 طلب عمل جديد لصوتك!',
+              body: `${userName} طلب ${workType} — الباقة: ${selectedPackage}`,
+              type: 'new_order',
+              read: false,
+              createdAt: serverTimestamp(),
+            });
+          }
+        } catch (_) {}
+      }
+
+      setSelectedPackage(''); setSelectedVoiceActor('');
+      setWorkType(''); setDescription('');
+      setAttachedFile(null); setShowForm(false);
     } catch (err) {
       console.error(err);
       setFormError('حدث خطأ أثناء الإرسال.');
@@ -157,7 +169,10 @@ export default function ClientDashboard() {
     setSubmitting(false);
   };
 
-  const handleLogout = () => { localStorage.clear(); router.push('/login'); };
+  const handleLogout = async () => {
+    await logout();
+    router.push('/login');
+  };
 
   if (!mounted || loading) {
     return (
@@ -238,8 +253,7 @@ export default function ClientDashboard() {
                   <div className="flex items-center gap-3 mb-2">
                     <h3 className="font-black text-gray-900">{order.selectedPackage}</h3>
                     <span className={`px-3 py-1 rounded-full text-xs font-black flex items-center gap-1 ${status.color}`}>
-                      <StatusIcon size={12} />
-                      {status.label}
+                      <StatusIcon size={12} />{status.label}
                     </span>
                   </div>
                   <p className="text-gray-500 font-bold text-sm mb-1">المعلق: <span className="text-gray-700">{order.selectedVoiceActor}</span></p>
@@ -252,36 +266,24 @@ export default function ClientDashboard() {
         )}
       </div>
 
-      {/* نافذة الطلب الجديد */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-black text-gray-900">طلب جديد</h2>
-              <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
-              </button>
+              <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600"><X size={24} /></button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
-
-              {/* الباقة — قائمة منسدلة مع تفاصيل */}
               <div>
                 <label className="block text-sm font-black text-gray-700 mb-2">اختر الباقة *</label>
-                <select
-                  value={selectedPackage}
-                  onChange={e => setSelectedPackage(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400"
-                >
+                <select value={selectedPackage} onChange={e => setSelectedPackage(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400">
                   <option value="">— اختر الباقة —</option>
                   {packagesDetails.map(pkg => (
-                    <option key={pkg.name} value={pkg.name}>
-                      {pkg.name} — {pkg.price}
-                    </option>
+                    <option key={pkg.name} value={pkg.name}>{pkg.name} — {pkg.price}</option>
                   ))}
                 </select>
-
-                {/* تفاصيل الباقة المختارة */}
                 {selectedPkgDetails && (
                   <div className="mt-3 bg-red-50 border border-red-100 rounded-2xl p-4">
                     <p className="font-black text-red-700 text-sm mb-1">{selectedPkgDetails.name} — {selectedPkgDetails.price}</p>
@@ -289,8 +291,7 @@ export default function ClientDashboard() {
                     <ul className="space-y-1">
                       {selectedPkgDetails.features.map((f, i) => (
                         <li key={i} className="text-xs text-red-600 font-bold flex items-center gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
-                          {f}
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />{f}
                         </li>
                       ))}
                     </ul>
@@ -298,14 +299,10 @@ export default function ClientDashboard() {
                 )}
               </div>
 
-              {/* المعلق — قائمة منسدلة */}
               <div>
                 <label className="block text-sm font-black text-gray-700 mb-2">اختر المعلق الصوتي *</label>
-                <select
-                  value={selectedVoiceActor}
-                  onChange={e => setSelectedVoiceActor(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400"
-                >
+                <select value={selectedVoiceActor} onChange={e => setSelectedVoiceActor(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400">
                   <option value="">— اختر المعلق —</option>
                   {artists.map(a => (
                     <option key={a.id} value={a.name}>
@@ -316,7 +313,6 @@ export default function ClientDashboard() {
                 </select>
               </div>
 
-              {/* نوع العمل */}
               <div>
                 <label className="block text-sm font-black text-gray-700 mb-2">نوع العمل *</label>
                 <select value={workType} onChange={e => setWorkType(e.target.value)}
@@ -326,7 +322,6 @@ export default function ClientDashboard() {
                 </select>
               </div>
 
-              {/* التفاصيل */}
               <div>
                 <label className="block text-sm font-black text-gray-700 mb-2">تفاصيل المشروع *</label>
                 <textarea value={description} onChange={e => setDescription(e.target.value)}
@@ -335,7 +330,6 @@ export default function ClientDashboard() {
                   placeholder="اشرح مشروعك بالتفصيل..." />
               </div>
 
-              {/* ملف مرفق */}
               <div>
                 <label className="block text-sm font-black text-gray-700 mb-2">ملف مرفق (اختياري)</label>
                 <input type="file" onChange={e => setAttachedFile(e.target.files?.[0] || null)}
