@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   doc, getDoc, updateDoc, arrayUnion, collection,
-  getDocs, deleteDoc, query, where
+  getDocs, deleteDoc, query, where, addDoc, serverTimestamp
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../components/firebase';
@@ -41,6 +41,8 @@ const Dashboard = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [allArtists, setAllArtists] = useState<any[]>([]);
   const [allOrders, setAllOrders] = useState<any[]>([]);
+  const [adminNotifications, setAdminNotifications] = useState<any[]>([]);
+  const [adminUnreadCount, setAdminUnreadCount] = useState(0);
   const [artistOrders, setArtistOrders] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -84,6 +86,13 @@ const Dashboard = () => {
           setAllArtists(artistsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
           const ordersSnap = await getDocs(collection(db, 'orders'));
           setAllOrders(ordersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+          // إشعارات المديرة
+          const notifsSnap = await getDocs(
+            query(collection(db, 'notifications'), where('artistId', '==', 'admin'))
+          );
+          const notifs = notifsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+          setAdminNotifications(notifs);
+          setAdminUnreadCount(notifs.filter((n: any) => !n.read).length);
         } catch (err) { console.error(err); }
         setLoading(false);
       };
@@ -126,6 +135,20 @@ const Dashboard = () => {
       fetchArtist();
     }
   }, [mounted, router]);
+
+  const sendNotification = async ({
+    artistId, title, body, type,
+  }: {
+    artistId: string; title: string; body: string; type: string;
+  }) => {
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        artistId, title, body, type,
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+    } catch (err) { console.error('فشل إرسال الإشعار:', err); }
+  };
 
   const togglePlay = (url: string, idx: number) => {
     if (playingIdx === idx) {
@@ -211,6 +234,14 @@ const Dashboard = () => {
       const newSample = { name: sampleName, url, pendingApproval: true };
       await updateDoc(doc(db, 'artists', artist.id), { audioSamples: arrayUnion(newSample) });
       setArtist({ ...artist, audioSamples: [...(artist.audioSamples || []), newSample] });
+
+      await sendNotification({
+        artistId: 'admin',
+        title: '🎙️ عينة صوتية جديدة بانتظار موافقتك',
+        body: `رفع ${artist.name} عينة جديدة: "${sampleName}"`,
+        type: 'new_sample',
+      });
+
       setSampleName(''); setAudioSample(null);
     } catch (_) { alert('حدث خطأ.'); }
     setUploading(false);
@@ -224,25 +255,47 @@ const Dashboard = () => {
     setUnreadCount(0);
   };
 
+  const markAdminAllRead = async () => {
+    for (const n of adminNotifications.filter((n: any) => !n.read)) {
+      try { await updateDoc(doc(db, 'notifications', n.id), { read: true }); } catch (_) {}
+    }
+    setAdminNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    setAdminUnreadCount(0);
+  };
+
   const handleApproveSample = async (artistId: string, idx: number) => {
     const target = allArtists.find(a => a.id === artistId);
     if (!target) return;
+    const sample = target.audioSamples[idx];
     const updated = target.audioSamples.map((s: any, i: number) =>
       i === idx ? { ...s, pendingApproval: false } : s
     );
     try {
       await updateDoc(doc(db, 'artists', artistId), { audioSamples: updated });
       setAllArtists(prev => prev.map(a => a.id === artistId ? { ...a, audioSamples: updated } : a));
+      await sendNotification({
+        artistId,
+        title: '✅ تمت الموافقة على عينتك الصوتية',
+        body: `تمت الموافقة على عينة "${sample?.name}" وأصبحت ظاهرة للعملاء`,
+        type: 'sample_approved',
+      });
     } catch (err) { console.error(err); }
   };
 
   const handleRejectSample = async (artistId: string, idx: number) => {
     const target = allArtists.find(a => a.id === artistId);
     if (!target) return;
+    const sample = target.audioSamples[idx];
     const updated = target.audioSamples.filter((_: any, i: number) => i !== idx);
     try {
       await updateDoc(doc(db, 'artists', artistId), { audioSamples: updated });
       setAllArtists(prev => prev.map(a => a.id === artistId ? { ...a, audioSamples: updated } : a));
+      await sendNotification({
+        artistId,
+        title: '❌ تم رفض عينتك الصوتية',
+        body: `للأسف تم رفض عينة "${sample?.name}" — يمكنك رفع عينة أخرى`,
+        type: 'sample_rejected',
+      });
     } catch (err) { console.error(err); }
   };
 
@@ -301,6 +354,13 @@ const Dashboard = () => {
             <span className="text-xl font-black">Vox<span className="text-red-500">Dub</span> <span className="text-gray-400 font-bold text-sm">— لوحة المديرة</span></span>
           </div>
           <div className="flex items-center gap-4">
+            <button onClick={() => setActiveTab('notifications' as any)}
+              className="relative w-10 h-10 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20 transition">
+              <Bell size={18} className="text-gray-300" />
+              {adminUnreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 rounded-full text-white text-xs font-black flex items-center justify-center">{adminUnreadCount}</span>
+              )}
+            </button>
             <Link href="/" className="text-gray-400 hover:text-white font-bold text-sm transition">الواجهة الرئيسية</Link>
             <button onClick={handleLogout} className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-full font-black text-sm hover:bg-red-700 transition">
               <LogOut size={16} /> خروج
@@ -327,12 +387,19 @@ const Dashboard = () => {
           </div>
 
           <div className="flex gap-2 mb-8 bg-white p-2 rounded-2xl border border-gray-100 shadow-sm">
-            {[{ key: 'artists', label: 'المعلقون', icon: Users }, { key: 'orders', label: 'الطلبات', icon: FileText }].map(tab => (
+            {[
+              { key: 'artists', label: 'المعلقون', icon: Users },
+              { key: 'orders', label: 'الطلبات', icon: FileText },
+              { key: 'notifications', label: 'الإشعارات', icon: Bell },
+            ].map(tab => (
               <button key={tab.key} onClick={() => setActiveTab(tab.key as any)}
                 className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-sm transition-all ${activeTab === tab.key ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-900'}`}>
                 <tab.icon size={16} />{tab.label}
                 {tab.key === 'artists' && artistsWithPending.length > 0 && (
                   <span className="bg-red-600 text-white text-xs px-2 py-0.5 rounded-full">{artistsWithPending.length}</span>
+                )}
+                {tab.key === 'notifications' && adminUnreadCount > 0 && (
+                  <span className="bg-red-600 text-white text-xs px-2 py-0.5 rounded-full">{adminUnreadCount}</span>
                 )}
               </button>
             ))}
@@ -416,8 +483,9 @@ const Dashboard = () => {
                             <h3 className="font-black text-gray-900">{order.selectedPackage}</h3>
                             <span className={`px-3 py-1 rounded-full text-xs font-black ${status.color}`}>{status.label}</span>
                           </div>
-                          <p className="text-gray-500 font-bold text-sm">العميل: <span className="text-gray-700">{order.clientName || order.firstName || '—'}</span></p>
+                          <p className="text-gray-500 font-bold text-sm">العميل: <span className="text-gray-700">{order.clientName || '—'}</span></p>
                           <p className="text-gray-500 font-bold text-sm">المعلق: <span className="text-gray-700">{order.selectedVoiceActor}</span></p>
+                          <p className="text-gray-500 font-bold text-sm">نوع العمل: <span className="text-gray-700">{order.workType}</span></p>
                         </div>
                         <select value={order.status || 'pending'} onChange={e => handleStatusChange(order.id, e.target.value)}
                           className="bg-white border border-gray-200 rounded-xl py-2 px-3 text-gray-700 font-bold text-sm outline-none focus:border-red-400 flex-shrink-0">
@@ -426,6 +494,54 @@ const Dashboard = () => {
                       </div>
                     );
                   })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* إشعارات المديرة */}
+          {activeTab === ('notifications' as any) && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-8 py-5 border-b border-gray-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg font-black text-gray-900">الإشعارات</h2>
+                  {adminUnreadCount > 0 && <span className="bg-red-600 text-white text-xs font-black px-2 py-0.5 rounded-full">{adminUnreadCount} جديد</span>}
+                </div>
+                {adminUnreadCount > 0 && (
+                  <button onClick={markAdminAllRead} className="text-gray-400 hover:text-gray-700 font-bold text-xs transition flex items-center gap-1">
+                    <Check size={12} /> تحديد الكل كمقروء
+                  </button>
+                )}
+              </div>
+              {adminNotifications.length === 0 ? (
+                <div className="p-16 text-center">
+                  <Bell size={48} className="text-gray-200 mx-auto mb-4" />
+                  <p className="text-gray-400 font-black">لا توجد إشعارات</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-50">
+                  {adminNotifications.sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds).map((n: any) => (
+                    <div key={n.id} className={`px-8 py-5 flex items-start gap-4 ${!n.read ? 'bg-red-50' : 'hover:bg-gray-50'} transition`}>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                        n.type === 'new_order' ? 'bg-blue-100' :
+                        n.type === 'new_sample' ? 'bg-amber-100' : 'bg-gray-100'
+                      }`}>
+                        {n.type === 'new_order' ? <Package size={18} className="text-blue-600" /> :
+                         n.type === 'new_sample' ? <Mic size={18} className="text-amber-600" /> :
+                         <Bell size={18} className="text-gray-600" />}
+                      </div>
+                      <div className="flex-1">
+                        <p className={`font-black text-sm ${!n.read ? 'text-gray-900' : 'text-gray-500'}`}>{n.title}</p>
+                        {n.body && <p className="text-gray-400 font-bold text-xs mt-0.5">{n.body}</p>}
+                        {n.createdAt && (
+                          <p className="text-gray-300 text-xs font-bold mt-1">
+                            {new Date(n.createdAt?.toDate?.() || n.createdAt).toLocaleDateString('ar-DZ')}
+                          </p>
+                        )}
+                      </div>
+                      {!n.read && <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0 mt-2" />}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -577,7 +693,7 @@ const Dashboard = () => {
                       <div key={order.id} className="px-6 py-4 flex items-center justify-between hover:bg-white/3 transition">
                         <div>
                           <p className="text-white font-black text-sm">{order.selectedPackage}</p>
-                          <p className="text-gray-400 font-bold text-xs mt-0.5">{order.firstName} {order.lastName} · {order.workType}</p>
+                          <p className="text-gray-400 font-bold text-xs mt-0.5">{order.clientName} · {order.workType}</p>
                         </div>
                         <span className={`px-3 py-1 rounded-full text-xs font-black ${status.color}`}>{status.label}</span>
                       </div>
@@ -829,20 +945,26 @@ const Dashboard = () => {
                 <div className="px-6 py-16 text-center">
                   <Bell size={48} className="text-gray-700 mx-auto mb-4" />
                   <p className="text-gray-500 font-black text-lg mb-1">لا توجد إشعارات</p>
-                  <p className="text-gray-600 font-bold text-sm">ستظهر هنا إشعارات الطلبات الجديدة</p>
+                  <p className="text-gray-600 font-bold text-sm">ستظهر هنا إشعارات الطلبات والعينات</p>
                 </div>
               ) : (
                 <div className="divide-y divide-white/5">
-                  {notifications.map((n: any) => (
+                  {notifications.sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds).map((n: any) => (
                     <div key={n.id} className={`px-6 py-4 flex items-start gap-3 transition ${!n.read ? 'bg-red-600/5' : 'hover:bg-white/3'}`}>
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${n.type === 'new_order' ? 'bg-blue-600/20' : n.type === 'review' ? 'bg-amber-600/20' : 'bg-red-600/20'}`}>
-                        {n.type === 'new_order' ? <Package size={16} className="text-blue-400" />
-                          : n.type === 'review' ? <Star size={16} className="text-amber-400" />
-                          : <Bell size={16} className="text-red-400" />}
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                        n.type === 'new_order' ? 'bg-blue-600/20' :
+                        n.type === 'sample_approved' ? 'bg-emerald-600/20' :
+                        n.type === 'sample_rejected' ? 'bg-red-600/20' : 'bg-amber-600/20'
+                      }`}>
+                        {n.type === 'new_order' ? <Package size={16} className="text-blue-400" /> :
+                         n.type === 'sample_approved' ? <Check size={16} className="text-emerald-400" /> :
+                         n.type === 'sample_rejected' ? <X size={16} className="text-red-400" /> :
+                         <Bell size={16} className="text-amber-400" />}
                       </div>
                       <div className="flex-1">
                         <p className={`font-black text-sm ${!n.read ? 'text-white' : 'text-gray-400'}`}>{n.title || 'إشعار جديد'}</p>
                         {n.body && <p className="text-gray-500 font-bold text-xs mt-0.5">{n.body}</p>}
+                        {n.createdAt && <p className="text-gray-600 text-xs font-bold mt-1">{new Date(n.createdAt?.toDate?.() || n.createdAt).toLocaleDateString('ar-DZ')}</p>}
                       </div>
                       {!n.read && <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0 mt-2" />}
                     </div>
