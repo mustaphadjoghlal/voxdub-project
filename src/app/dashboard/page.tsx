@@ -7,6 +7,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../components/firebase';
+import { useAuth } from '../context/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -34,6 +35,7 @@ const statusOptions = [
 type TabType = 'overview' | 'audio' | 'profile' | 'reviews' | 'notifications' | 'artists' | 'orders';
 
 const Dashboard = () => {
+  const { logout } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [artist, setArtist] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -96,14 +98,12 @@ const Dashboard = () => {
             setBioValue(data.bio || '');
             setTaglineValue(data.tagline || '');
 
-            // طلبات هذا المعلق
             const ordersSnap = await getDocs(collection(db, 'orders'));
             const myOrders = ordersSnap.docs
               .map(d => ({ id: d.id, ...d.data() } as any))
               .filter(o => o.selectedVoiceActor === data.name);
             setArtistOrders(myOrders);
 
-            // تقييمات
             try {
               const reviewsSnap = await getDocs(
                 query(collection(db, 'reviews'), where('artistId', '==', userId))
@@ -111,7 +111,6 @@ const Dashboard = () => {
               setReviews(reviewsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
             } catch (_) {}
 
-            // إشعارات
             try {
               const notifsSnap = await getDocs(
                 query(collection(db, 'notifications'), where('artistId', '==', userId))
@@ -225,11 +224,12 @@ const Dashboard = () => {
     setUnreadCount(0);
   };
 
-  // Admin handlers
   const handleApproveSample = async (artistId: string, idx: number) => {
     const target = allArtists.find(a => a.id === artistId);
     if (!target) return;
-    const updated = target.audioSamples.map((s: any, i: number) => i === idx ? { ...s, pendingApproval: false } : s);
+    const updated = target.audioSamples.map((s: any, i: number) =>
+      i === idx ? { ...s, pendingApproval: false } : s
+    );
     try {
       await updateDoc(doc(db, 'artists', artistId), { audioSamples: updated });
       setAllArtists(prev => prev.map(a => a.id === artistId ? { ...a, audioSamples: updated } : a));
@@ -263,13 +263,15 @@ const Dashboard = () => {
     } catch (err) { console.error(err); }
   };
 
-  const handleLogout = () => { localStorage.clear(); router.push('/login'); };
+  const handleLogout = async () => {
+    await logout();
+    router.push('/login');
+  };
 
   const avgRating = reviews.length
     ? (reviews.reduce((s: number, r: any) => s + (r.rating || 0), 0) / reviews.length).toFixed(1)
     : null;
 
-  // Loading
   if (!mounted || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-950" dir="rtl">
@@ -456,7 +458,6 @@ const Dashboard = () => {
         .red-glow { box-shadow: 0 0 40px rgba(220,38,38,0.2); }
       `}</style>
 
-      {/* Header */}
       <header className="sticky top-0 z-50 bg-[#0f0f0f]/90 backdrop-blur border-b border-white/5 px-6 py-4 flex justify-between items-center">
         <div className="flex items-center gap-3">
           <div className="bg-red-600 p-2 rounded-xl" style={{boxShadow:'0 0 20px rgba(220,38,38,0.4)'}}>
@@ -480,8 +481,6 @@ const Dashboard = () => {
       </header>
 
       <div className="max-w-5xl mx-auto px-4 py-8">
-
-        {/* Artist Card */}
         <div className="glass rounded-3xl p-6 mb-6 red-glow relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-l from-red-600/10 to-transparent pointer-events-none" />
           <div className="relative flex flex-col md:flex-row items-center md:items-start gap-6">
@@ -503,7 +502,6 @@ const Dashboard = () => {
                 <span className="bg-red-600/20 text-red-400 text-xs font-black px-2 py-0.5 rounded-full border border-red-600/30">معلق</span>
               </div>
 
-              {/* Tagline inline edit */}
               <div className="flex items-center gap-2 justify-center md:justify-start mb-3">
                 {editingTagline ? (
                   <div className="flex items-center gap-2 w-full max-w-sm">
@@ -548,7 +546,6 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Tabs */}
         <div className="flex gap-1 mb-6 glass rounded-2xl p-1.5 overflow-x-auto">
           {tabs.map(tab => (
             <button key={tab.key} onClick={() => setActiveTab(tab.key as TabType)}
@@ -562,7 +559,6 @@ const Dashboard = () => {
           ))}
         </div>
 
-        {/* ── Overview ── */}
         {activeTab === 'overview' && (
           <div className="space-y-4">
             <div className="glass rounded-2xl overflow-hidden">
@@ -616,7 +612,6 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* ── Audio ── */}
         {activeTab === 'audio' && (
           <div className="space-y-4">
             <div className="glass rounded-2xl p-6">
@@ -699,7 +694,6 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* ── Profile ── */}
         {activeTab === 'profile' && (
           <div className="space-y-4">
             <div className="glass rounded-2xl p-6">
@@ -758,7 +752,6 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* ── Reviews ── */}
         {activeTab === 'reviews' && (
           <div className="space-y-4">
             {reviews.length > 0 && (
@@ -785,7 +778,6 @@ const Dashboard = () => {
                 </div>
               </div>
             )}
-
             <div className="glass rounded-2xl overflow-hidden">
               <div className="px-6 py-4 border-b border-white/5 flex items-center gap-2">
                 <MessageSquare size={18} className="text-red-400" /><h2 className="text-white font-black">تعليقات العملاء</h2>
@@ -821,7 +813,6 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* ── Notifications ── */}
         {activeTab === 'notifications' && (
           <div className="space-y-4">
             <div className="glass rounded-2xl overflow-hidden">
@@ -859,15 +850,8 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
-
-            <div className="glass rounded-2xl p-4 border border-amber-500/20 bg-amber-500/5">
-              <p className="text-amber-400 font-bold text-xs leading-relaxed">
-                💡 <span className="font-black">لتفعيل الإشعارات التلقائية:</span> عند إضافة طلب جديد في Firestore، أضف document في collection <span className="font-black">"notifications"</span> بالحقول: artistId, title, body, type: "new_order", read: false
-              </p>
-            </div>
           </div>
         )}
-
       </div>
     </div>
   );
