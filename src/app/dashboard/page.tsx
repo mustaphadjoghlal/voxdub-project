@@ -13,7 +13,8 @@ import Link from 'next/link';
 import {
   Mic2, Upload, LogOut, User, Music, Plus, Eye, Users, FileText,
   Bell, CheckCircle, Check, X, Trash2, Edit3, Save, Star,
-  MessageSquare, Mic, Package, Sparkles, Camera, BarChart3, Heart, TrendingUp
+  MessageSquare, Mic, Package, Sparkles, Camera, BarChart3, Heart,
+  TrendingUp, Building2
 } from 'lucide-react';
 
 const statusConfig: Record<string, { label: string; color: string }> = {
@@ -32,7 +33,7 @@ const statusOptions = [
   { value: 'completed',   label: 'مكتمل' },
 ];
 
-type TabType = 'overview' | 'audio' | 'profile' | 'reviews' | 'notifications' | 'artists' | 'orders' | 'stats';
+type TabType = 'overview' | 'audio' | 'profile' | 'reviews' | 'notifications' | 'artists' | 'orders' | 'stats' | 'partners';
 
 const Dashboard = () => {
   const { logout } = useAuth();
@@ -41,12 +42,19 @@ const Dashboard = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [allArtists, setAllArtists] = useState<any[]>([]);
   const [allOrders, setAllOrders] = useState<any[]>([]);
+  const [allPartners, setAllPartners] = useState<any[]>([]);
   const [adminNotifications, setAdminNotifications] = useState<any[]>([]);
   const [adminUnreadCount, setAdminUnreadCount] = useState(0);
   const [artistOrders, setArtistOrders] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // حقول الشريك الجديد
+  const [newPartnerName, setNewPartnerName] = useState('');
+  const [newPartnerLogo, setNewPartnerLogo] = useState<File | null>(null);
+  const [addingPartner, setAddingPartner] = useState(false);
+  const [deletingPartnerId, setDeletingPartnerId] = useState<string | null>(null);
 
   const [profilePic, setProfilePic] = useState<File | null>(null);
   const [profilePicPreview, setProfilePicPreview] = useState<string | null>(null);
@@ -86,6 +94,8 @@ const Dashboard = () => {
           setAllArtists(artistsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
           const ordersSnap = await getDocs(collection(db, 'orders'));
           setAllOrders(ordersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+          const partnersSnap = await getDocs(collection(db, 'partners'));
+          setAllPartners(partnersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
           const notifsSnap = await getDocs(
             query(collection(db, 'notifications'), where('artistId', '==', 'admin'))
           );
@@ -143,6 +153,40 @@ const Dashboard = () => {
         artistId, title, body, type, read: false, createdAt: serverTimestamp(),
       });
     } catch (err) { console.error('فشل إرسال الإشعار:', err); }
+  };
+
+  // إضافة شريك جديد
+  const handleAddPartner = async () => {
+    if (!newPartnerName.trim()) return;
+    setAddingPartner(true);
+    try {
+      let logoUrl = '';
+      if (newPartnerLogo) {
+        const storageRef = ref(storage, `partners/${Date.now()}_${newPartnerLogo.name}`);
+        await uploadBytes(storageRef, newPartnerLogo);
+        logoUrl = await getDownloadURL(storageRef);
+      }
+      const docRef = await addDoc(collection(db, 'partners'), {
+        name: newPartnerName.trim(),
+        logo: logoUrl,
+        createdAt: serverTimestamp(),
+      });
+      setAllPartners(prev => [...prev, { id: docRef.id, name: newPartnerName.trim(), logo: logoUrl }]);
+      setNewPartnerName('');
+      setNewPartnerLogo(null);
+    } catch (err) { alert('حدث خطأ.'); }
+    setAddingPartner(false);
+  };
+
+  // حذف شريك
+  const handleDeletePartner = async (partnerId: string) => {
+    if (!confirm('هل تريد حذف هذا الشريك؟')) return;
+    setDeletingPartnerId(partnerId);
+    try {
+      await deleteDoc(doc(db, 'partners', partnerId));
+      setAllPartners(prev => prev.filter(p => p.id !== partnerId));
+    } catch (err) { alert('حدث خطأ.'); }
+    setDeletingPartnerId(null);
   };
 
   const togglePlay = (url: string, idx: number) => {
@@ -338,7 +382,6 @@ const Dashboard = () => {
     const artistsWithPending = allArtists.filter(a => a.audioSamples?.some((s: any) => s.pendingApproval));
     const completedOrders = allOrders.filter(o => o.status === 'completed');
 
-    // بيانات الإحصائيات
     const statusStats = statusOptions.map(s => ({
       ...s,
       count: allOrders.filter(o => o.status === s.value).length,
@@ -399,7 +442,6 @@ const Dashboard = () => {
 
         <div className="max-w-7xl mx-auto px-6 py-10">
 
-          {/* إحصائيات سريعة */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             {[
               { label: 'إجمالي المعلقين', value: allArtists.length, color: 'bg-blue-500', icon: Users },
@@ -420,10 +462,11 @@ const Dashboard = () => {
           {/* Tabs */}
           <div className="flex gap-2 mb-8 bg-white p-2 rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
             {[
-              { key: 'artists', label: 'المعلقون', icon: Users },
-              { key: 'orders', label: 'الطلبات', icon: FileText },
-              { key: 'stats', label: 'الإحصائيات', icon: BarChart3 },
-              { key: 'notifications', label: 'الإشعارات', icon: Bell },
+              { key: 'artists',       label: 'المعلقون',     icon: Users },
+              { key: 'orders',        label: 'الطلبات',      icon: FileText },
+              { key: 'stats',         label: 'الإحصائيات',   icon: BarChart3 },
+              { key: 'partners',      label: 'الشركاء',      icon: Building2 },
+              { key: 'notifications', label: 'الإشعارات',    icon: Bell },
             ].map(tab => (
               <button key={tab.key} onClick={() => setActiveTab(tab.key as TabType)}
                 className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-sm transition-all whitespace-nowrap ${activeTab === tab.key ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-900'}`}>
@@ -537,8 +580,6 @@ const Dashboard = () => {
           {/* ===== تبويب الإحصائيات ===== */}
           {activeTab === 'stats' && (
             <div className="space-y-6">
-
-              {/* توزيع حالات الطلبات */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-8 py-5 border-b border-gray-100 flex items-center gap-2">
                   <BarChart3 size={20} className="text-violet-600" />
@@ -564,8 +605,6 @@ const Dashboard = () => {
                           </div>
                         ))}
                       </div>
-
-                      {/* دائرة بيانية */}
                       <div className="flex items-center justify-center gap-8 flex-wrap">
                         <div className="relative w-36 h-36">
                           <svg viewBox="0 0 36 36" className="w-36 h-36 -rotate-90">
@@ -608,7 +647,6 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              {/* المعلقون الأكثر طلباً */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-8 py-5 border-b border-gray-100 flex items-center gap-2">
                   <TrendingUp size={20} className="text-red-600" />
@@ -634,7 +672,7 @@ const Dashboard = () => {
                               <span className="font-black text-gray-500 text-xs">{a.count} طلب</span>
                             </div>
                             <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                              <div className="h-full bg-red-500 rounded-full transition-all duration-700"
+                              <div className="h-full bg-red-500 rounded-full"
                                 style={{ width: `${(a.count / maxArtistOrders) * 100}%` }} />
                             </div>
                           </div>
@@ -645,7 +683,6 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              {/* أنواع الأعمال + الباقات */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
@@ -709,7 +746,97 @@ const Dashboard = () => {
                   </div>
                 </div>
               </div>
+            </div>
+          )}
 
+          {/* ===== تبويب الشركاء ===== */}
+          {activeTab === 'partners' && (
+            <div className="space-y-6">
+              {/* إضافة شريك جديد */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-8 py-5 border-b border-gray-100 flex items-center gap-2">
+                  <Plus size={20} className="text-red-600" />
+                  <h2 className="text-lg font-black text-gray-900">إضافة شريك جديد</h2>
+                </div>
+                <div className="p-8">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    <div className="md:col-span-1">
+                      <label className="block text-sm font-black text-gray-700 mb-2">اسم الشركة / المؤسسة *</label>
+                      <input
+                        type="text"
+                        value={newPartnerName}
+                        onChange={e => setNewPartnerName(e.target.value)}
+                        placeholder="مثال: شركة الجزائر للإنتاج"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition"
+                      />
+                    </div>
+                    <div className="md:col-span-1">
+                      <label className="block text-sm font-black text-gray-700 mb-2">شعار الشركة (اختياري)</label>
+                      <div className="flex items-center gap-3">
+                        {newPartnerLogo && (
+                          <img src={URL.createObjectURL(newPartnerLogo)} alt="preview"
+                            className="w-12 h-12 rounded-xl object-contain border border-gray-200 flex-shrink-0" />
+                        )}
+                        <label className="flex-1 cursor-pointer flex items-center gap-2 px-4 py-3 rounded-xl border border-dashed border-gray-300 hover:border-red-400 transition text-gray-500 font-bold text-sm">
+                          <Upload size={16} />
+                          {newPartnerLogo ? newPartnerLogo.name : 'اختر صورة'}
+                          <input type="file" accept="image/*" className="hidden"
+                            onChange={e => setNewPartnerLogo(e.target.files?.[0] || null)} />
+                        </label>
+                      </div>
+                    </div>
+                    <div>
+                      <button
+                        onClick={handleAddPartner}
+                        disabled={addingPartner || !newPartnerName.trim()}
+                        className="w-full bg-red-600 text-white py-3 rounded-xl font-black hover:bg-red-700 disabled:bg-gray-200 disabled:text-gray-400 transition flex items-center justify-center gap-2"
+                      >
+                        <Plus size={18} />
+                        {addingPartner ? 'جاري الإضافة...' : 'إضافة شريك'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* قائمة الشركاء */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-8 py-5 border-b border-gray-100 flex items-center gap-2">
+                  <Building2 size={20} className="text-blue-600" />
+                  <h2 className="text-lg font-black text-gray-900">الشركاء الحاليون ({allPartners.length})</h2>
+                </div>
+                {allPartners.length === 0 ? (
+                  <div className="p-16 text-center">
+                    <Building2 size={48} className="text-gray-200 mx-auto mb-4" />
+                    <p className="text-gray-400 font-black text-lg">لا يوجد شركاء بعد</p>
+                    <p className="text-gray-300 font-bold text-sm mt-2">أضف أول شريك من النموذج أعلاه</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-8">
+                    {allPartners.map(partner => (
+                      <div key={partner.id}
+                        className="bg-gray-50 rounded-2xl p-4 border border-gray-100 flex flex-col items-center gap-3 relative group hover:border-red-100 hover:shadow-md transition">
+                        <button
+                          onClick={() => handleDeletePartner(partner.id)}
+                          disabled={deletingPartnerId === partner.id}
+                          className="absolute top-2 left-2 w-7 h-7 bg-red-100 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition hover:bg-red-600 hover:text-white text-red-500"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                        {partner.logo ? (
+                          <img src={partner.logo} alt={partner.name}
+                            className="w-16 h-16 object-contain rounded-xl" />
+                        ) : (
+                          <div className="w-16 h-16 bg-red-50 rounded-xl flex items-center justify-center">
+                            <Building2 size={28} className="text-red-300" />
+                          </div>
+                        )}
+                        <p className="font-black text-gray-800 text-sm text-center">{partner.name}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
