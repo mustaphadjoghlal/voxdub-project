@@ -10,6 +10,7 @@ import { Mic2, Play, Pause, ArrowRight, Star, Award } from 'lucide-react';
 interface AudioSample {
   name: string;
   url: string;
+  pendingApproval?: boolean;
 }
 
 interface Artist {
@@ -55,14 +56,14 @@ export default function ArtistProfile() {
     if (id) fetchArtist();
   }, [id]);
 
-  const getSampleUrl = (sample: AudioSample | string): string => {
-    if (typeof sample === 'string') return sample;
-    return sample.url;
-  };
-
   const getSampleName = (sample: AudioSample | string, index: number): string => {
     if (typeof sample === 'string') return `عينة ${index + 1}`;
     return sample.name;
+  };
+
+  const getSampleUrl = (sample: AudioSample | string): string => {
+    if (typeof sample === 'string') return sample;
+    return sample.url;
   };
 
   const toggleAudio = (index: number, url: string) => {
@@ -96,7 +97,10 @@ export default function ArtistProfile() {
     );
   }
 
-  const samples = artist.audioSamples || [];
+  // العينات المعتمدة فقط
+  const samples = (artist.audioSamples || []).filter((s: any) =>
+    typeof s === 'string' || !s.pendingApproval
+  );
 
   return (
     <div className="min-h-screen bg-gray-50" dir="rtl">
@@ -105,14 +109,11 @@ export default function ArtistProfile() {
       <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-gray-100 h-20 flex items-center">
         <div className="max-w-6xl mx-auto px-6 w-full flex justify-between items-center">
           <Link href="/" className="flex items-center gap-2">
-            <div className="bg-red-600 p-2 rounded-xl">
-              <Mic2 className="text-white w-5 h-5" />
-            </div>
+            <div className="bg-red-600 p-2 rounded-xl"><Mic2 className="text-white w-5 h-5" /></div>
             <span className="text-2xl font-black">Vox<span className="text-red-600">Dub</span></span>
           </Link>
           <Link href="/artists" className="flex items-center gap-2 text-gray-600 font-bold hover:text-red-600 transition">
-            <ArrowRight size={18} />
-            العودة للمعلقين
+            <ArrowRight size={18} /> العودة للمعلقين
           </Link>
         </div>
       </nav>
@@ -130,20 +131,15 @@ export default function ArtistProfile() {
               </div>
             )}
           </div>
-
           <div className="flex-1 text-center md:text-right">
             <div className="flex items-center justify-center md:justify-end gap-3 mb-1">
               <Award size={20} className="text-red-400" />
               <h1 className="text-3xl font-black">{artist.name}</h1>
             </div>
-
-            {/* Tagline */}
             {artist.tagline && (
               <p className="text-red-400 font-black text-sm mb-3 italic">"{artist.tagline}"</p>
             )}
-
             <p className="text-gray-400 font-bold mb-4">{artist.role || artist.style || ''}</p>
-
             {artist.rating && (
               <div className="flex items-center justify-center md:justify-end gap-1 mb-4">
                 {[1,2,3,4,5].map(s => (
@@ -152,8 +148,7 @@ export default function ArtistProfile() {
                 <span className="font-black mr-2">{artist.rating}</span>
               </div>
             )}
-
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {artist.gender && (
                 <div className="bg-white/5 p-3 rounded-2xl text-center border border-white/10">
                   <p className="text-gray-400 text-xs font-bold mb-1">الجنس</p>
@@ -163,7 +158,7 @@ export default function ArtistProfile() {
               {artist.voiceType && (
                 <div className="bg-white/5 p-3 rounded-2xl text-center border border-white/10">
                   <p className="text-gray-400 text-xs font-bold mb-1">نوع الصوت</p>
-                  <p className="font-black text-sm">{artist.voiceType}</p>
+                  <p className="font-black text-sm">{Array.isArray(artist.voiceType) ? (artist.voiceType as string[]).join('، ') : artist.voiceType}</p>
                 </div>
               )}
               {artist.experience && (
@@ -190,7 +185,7 @@ export default function ArtistProfile() {
           </div>
         )}
 
-        {/* العينات الصوتية */}
+        {/* العينات الصوتية المعتمدة فقط */}
         <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm mb-8">
           <h2 className="text-2xl font-black text-gray-900 mb-6">العينات الصوتية</h2>
           {samples.length > 0 ? (
@@ -201,17 +196,13 @@ export default function ArtistProfile() {
                 const isPlaying = playingIndex === index;
                 return (
                   <div key={index} className="flex items-center gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                    <button
-                      onClick={() => toggleAudio(index, url)}
-                      className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all ${isPlaying ? 'bg-red-600 text-white' : 'bg-gray-900 text-white hover:bg-red-600'}`}
-                    >
+                    <button onClick={() => toggleAudio(index, url)}
+                      className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all ${isPlaying ? 'bg-red-600 text-white' : 'bg-gray-900 text-white hover:bg-red-600'}`}>
                       {isPlaying ? <Pause size={20} /> : <Play size={20} fill="white" />}
                     </button>
                     <div className="flex-1">
                       <p className="font-black text-gray-900 text-sm mb-1">{name}</p>
-                      {isPlaying && (
-                        <p className="text-red-600 text-xs font-bold animate-pulse">▶ جاري التشغيل...</p>
-                      )}
+                      {isPlaying && <p className="text-red-600 text-xs font-bold animate-pulse">▶ جاري التشغيل...</p>}
                     </div>
                   </div>
                 );
