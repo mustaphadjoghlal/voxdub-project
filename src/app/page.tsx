@@ -14,6 +14,7 @@ import {
 interface AudioSample {
   name: string;
   url: string;
+  pendingApproval?: boolean;
 }
 
 interface Artist {
@@ -57,20 +58,27 @@ export default function Home() {
 
   const getAudioUrl = (artist: Artist): string | null => {
     if (!artist.audioSamples || artist.audioSamples.length === 0) return artist.audio || null;
+    // نأخذ أول عينة معتمدة فقط
+    const approved = artist.audioSamples.find((s: any) =>
+      typeof s === 'object' && 'url' in s && !s.pendingApproval
+    );
+    if (approved && typeof approved === 'object' && 'url' in approved) return (approved as AudioSample).url;
     const first = artist.audioSamples[0];
     if (typeof first === 'string') return first;
-    if (typeof first === 'object' && 'url' in first) return (first as AudioSample).url;
     return artist.audio || null;
   };
 
-  // جلب المعلقين
+  // جلب المعلقين الذين عندهم عينة معتمدة
   useEffect(() => {
     const fetchArtists = async () => {
       try {
         const snapshot = await getDocs(collection(db, 'artists'));
         const data = snapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() } as Artist))
-          .filter(a => a.name);
+          .filter(a =>
+            a.name &&
+            (a as any).audioSamples?.some((s: any) => !s.pendingApproval)
+          );
         setArtists(data);
       } catch (err) {
         console.error(err);
@@ -98,10 +106,7 @@ export default function Home() {
   useEffect(() => {
     const fetchLoggedInArtist = async () => {
       if (!mounted) return;
-      if (userRole !== 'artist') {
-        setLoggedInArtist(null);
-        return;
-      }
+      if (userRole !== 'artist') { setLoggedInArtist(null); return; }
       const userId = localStorage.getItem('userId');
       if (!userId) return;
       try {
@@ -110,9 +115,7 @@ export default function Home() {
           setLoggedInArtist({ id: docSnap.id, ...docSnap.data() } as Artist);
           setLoggedInArtistDocId(docSnap.id);
         }
-      } catch (err) {
-        console.error(err);
-      }
+      } catch (err) { console.error(err); }
     };
     fetchLoggedInArtist();
   }, [userRole, mounted]);
@@ -158,17 +161,13 @@ export default function Home() {
       <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-gray-100 h-20 flex items-center">
         <div className="max-w-7xl mx-auto px-6 w-full flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <div className="bg-red-600 p-2 rounded-xl">
-              <Mic2 className="text-white w-5 h-5" />
-            </div>
+            <div className="bg-red-600 p-2 rounded-xl"><Mic2 className="text-white w-5 h-5" /></div>
             <span className="text-2xl font-black">Vox<span className="text-red-600">Dub</span></span>
           </div>
-
           <div className="flex items-center gap-3">
             <a href="#artists" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">المعلقون</a>
             <a href="#partners" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">شركاؤنا</a>
             <a href="#pricing" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">الباقات</a>
-
             {!mounted ? (
               <div className="w-32 h-10 bg-gray-100 rounded-full animate-pulse" />
             ) : (
@@ -176,17 +175,12 @@ export default function Home() {
                 {userRole === 'visitor' && (
                   <>
                     <Link href="/login" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">دخول</Link>
-                    <Link href="/register" className="bg-red-600 text-white font-bold py-2 px-6 rounded-full hover:bg-red-700 transition">
-                      انضم إلينا
-                    </Link>
+                    <Link href="/register" className="bg-red-600 text-white font-bold py-2 px-6 rounded-full hover:bg-red-700 transition">انضم إلينا</Link>
                   </>
                 )}
-
                 {userRole === 'artist' && loggedInArtist && (
                   <div className="flex items-center gap-3">
-                    <span className="text-gray-700 font-black hidden md:block">
-                      مرحباً، <span className="text-red-600">{loggedInArtist.name?.split(' ')[0]}</span> 👋
-                    </span>
+                    <span className="text-gray-700 font-black hidden md:block">مرحباً، <span className="text-red-600">{loggedInArtist.name?.split(' ')[0]}</span> 👋</span>
                     <button className="relative w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition">
                       <Bell size={18} className="text-gray-600" />
                       <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-600 rounded-full border-2 border-white"></span>
@@ -195,13 +189,9 @@ export default function Home() {
                       <button onClick={() => setShowUserMenu(!showUserMenu)}
                         className="flex items-center gap-2 bg-gray-900 text-white py-2 px-4 rounded-full font-black text-sm hover:bg-red-600 transition">
                         <div className="w-6 h-6 rounded-full overflow-hidden bg-gray-600 flex-shrink-0">
-                          {loggedInArtist.profilePicture ? (
-                            <img src={loggedInArtist.profilePicture} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-xs font-black">
-                              {loggedInArtist.name?.[0]}
-                            </div>
-                          )}
+                          {loggedInArtist.profilePicture
+                            ? <img src={loggedInArtist.profilePicture} alt="" className="w-full h-full object-cover" />
+                            : <div className="w-full h-full flex items-center justify-center text-xs font-black">{loggedInArtist.name?.[0]}</div>}
                         </div>
                         حسابي
                       </button>
@@ -228,7 +218,6 @@ export default function Home() {
                     </div>
                   </div>
                 )}
-
                 {userRole === 'client' && (
                   <div className="flex items-center gap-3">
                     <button className="relative w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition">
@@ -254,7 +243,6 @@ export default function Home() {
                     </div>
                   </div>
                 )}
-
                 {userRole === 'admin' && (
                   <div className="flex items-center gap-3">
                     <Link href="/dashboard" className="bg-gray-900 text-white font-bold py-2 px-5 rounded-full hover:bg-red-600 transition text-sm flex items-center gap-2">
@@ -280,8 +268,7 @@ export default function Home() {
             🎙️ منصة المعلقين الصوتيين الأولى في الجزائر
           </div>
           <h1 className="text-6xl md:text-7xl font-black text-gray-900 mb-8 leading-tight">
-            اجعل لمشروعك<br />
-            <span className="text-red-600">صوتاً</span> لا يُنسى
+            اجعل لمشروعك<br /><span className="text-red-600">صوتاً</span> لا يُنسى
           </h1>
           <p className="text-xl text-gray-500 max-w-2xl mx-auto mb-12 leading-relaxed font-bold">
             نخبة من المعلقين الصوتيين المحترفين بجودة استوديو عالمية.
@@ -334,7 +321,6 @@ export default function Home() {
             <h2 className="text-4xl font-black text-gray-900 mb-4">معلقونا الصوتيون</h2>
             <p className="text-gray-500 font-bold text-lg">اضغط على اسم المعلق لسماع عينته الصوتية</p>
           </div>
-
           {loadingArtists ? (
             <div className="text-center py-20 text-gray-400 font-bold">جاري تحميل المعلقين...</div>
           ) : artists.length === 0 ? (
@@ -388,9 +374,7 @@ export default function Home() {
                         {(artist.profilePicture || artist.image) ? (
                           <img src={artist.profilePicture || artist.image} alt={artist.name} className="w-full h-full object-cover" />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-2xl font-black text-gray-400">
-                            {artist.name?.[0] || '?'}
-                          </div>
+                          <div className="w-full h-full flex items-center justify-center text-2xl font-black text-gray-400">{artist.name?.[0] || '?'}</div>
                         )}
                       </div>
                       <div className="text-sm font-bold text-gray-300 space-y-1 text-right">
@@ -414,7 +398,6 @@ export default function Home() {
               })}
             </div>
           )}
-
           <div className="text-center mt-12">
             <Link href="/artists" className="bg-gray-900 text-white px-10 py-4 rounded-full font-black text-lg hover:bg-red-600 transition-all inline-block">
               عرض جميع المعلقين
@@ -446,7 +429,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ===== شركاؤنا ===== */}
+      {/* شركاؤنا */}
       {partners.length > 0 && (
         <section id="partners" className="py-20 bg-gray-50 overflow-hidden">
           <div className="max-w-6xl mx-auto px-6 text-center mb-12">
@@ -456,17 +439,13 @@ export default function Home() {
             </div>
             <p className="text-gray-500 font-bold">مؤسسات وشركات وثقت بأصواتنا</p>
           </div>
-
-          {/* شريط متحرك */}
           <div className="relative">
             <div className="flex animate-marquee gap-8 w-max">
-              {/* نكرر القائمة مرتين لتأثير اللانهاية */}
               {[...partners, ...partners].map((partner, i) => (
                 <div key={i}
                   className="flex-shrink-0 bg-white rounded-2xl px-8 py-6 shadow-sm border border-gray-100 flex flex-col items-center gap-3 min-w-[180px] hover:shadow-md hover:border-red-100 transition-all">
                   {partner.logo ? (
-                    <img src={partner.logo} alt={partner.name}
-                      className="w-16 h-16 object-contain rounded-xl" />
+                    <img src={partner.logo} alt={partner.name} className="w-16 h-16 object-contain rounded-xl" />
                   ) : (
                     <div className="w-16 h-16 bg-red-50 rounded-xl flex items-center justify-center">
                       <Building2 size={28} className="text-red-400" />
@@ -488,9 +467,7 @@ export default function Home() {
             {packages.map((plan, i) => (
               <div key={i} className={`p-8 rounded-3xl border-2 bg-white transition-all ${plan.popular ? 'border-red-600 shadow-2xl scale-105 relative' : 'border-gray-100'}`}>
                 {plan.popular && (
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-1 rounded-full font-black text-sm">
-                    الأكثر طلباً
-                  </div>
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-1 rounded-full font-black text-sm">الأكثر طلباً</div>
                 )}
                 <h3 className="text-xl font-black text-gray-900 mb-1">{plan.name}</h3>
                 <p className="text-gray-400 font-bold text-sm mb-6">{plan.desc}</p>
@@ -501,15 +478,12 @@ export default function Home() {
                 <ul className="space-y-3 mb-8">
                   {plan.features.map((f, j) => (
                     <li key={j} className="flex items-center gap-2 text-sm font-bold text-gray-600">
-                      <CheckCircle2 size={16} className="text-red-600 flex-shrink-0" />
-                      {f}
+                      <CheckCircle2 size={16} className="text-red-600 flex-shrink-0" />{f}
                     </li>
                   ))}
                 </ul>
-                <Link
-                  href={mounted && userRole !== 'visitor' ? '/client-dashboard' : '/register'}
-                  className={`w-full py-3 rounded-2xl block text-center font-black transition-all ${plan.popular ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-gray-900 text-white hover:bg-gray-700'}`}
-                >
+                <Link href={mounted && userRole !== 'visitor' ? '/client-dashboard' : '/register'}
+                  className={`w-full py-3 rounded-2xl block text-center font-black transition-all ${plan.popular ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-gray-900 text-white hover:bg-gray-700'}`}>
                   ابدأ الآن
                 </Link>
               </div>
@@ -531,12 +505,8 @@ export default function Home() {
               </Link>
             ) : (
               <>
-                <Link href="/register" className="bg-red-600 text-white px-10 py-4 rounded-full font-black text-lg hover:bg-red-700 transition-all">
-                  انضم إلينا
-                </Link>
-                <Link href="/login" className="bg-white text-gray-900 px-10 py-4 rounded-full font-black text-lg hover:bg-gray-100 transition-all">
-                  تسجيل الدخول
-                </Link>
+                <Link href="/register" className="bg-red-600 text-white px-10 py-4 rounded-full font-black text-lg hover:bg-red-700 transition-all">انضم إلينا</Link>
+                <Link href="/login" className="bg-white text-gray-900 px-10 py-4 rounded-full font-black text-lg hover:bg-gray-100 transition-all">تسجيل الدخول</Link>
               </>
             )}
           </div>
