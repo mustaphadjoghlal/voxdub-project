@@ -8,7 +8,7 @@ import { useAuth } from './context/AuthContext';
 import {
   Mic2, Play, Pause, Award, Star, Mic,
   Search, MessageSquare, Headphones, FileCheck,
-  CheckCircle2, Bell, Mail, User, LogOut, LayoutDashboard
+  CheckCircle2, Bell, User, LogOut, LayoutDashboard, Building2
 } from 'lucide-react';
 
 interface AudioSample {
@@ -32,9 +32,16 @@ interface Artist {
   voiceType?: string;
 }
 
+interface Partner {
+  id: string;
+  name: string;
+  logo?: string;
+}
+
 export default function Home() {
   const { userRole, mounted, logout } = useAuth();
   const [artists, setArtists] = useState<Artist[]>([]);
+  const [partners, setPartners] = useState<Partner[]>([]);
   const [loadingArtists, setLoadingArtists] = useState(true);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
@@ -56,6 +63,7 @@ export default function Home() {
     return artist.audio || null;
   };
 
+  // جلب المعلقين
   useEffect(() => {
     const fetchArtists = async () => {
       try {
@@ -71,6 +79,20 @@ export default function Home() {
       }
     };
     fetchArtists();
+  }, []);
+
+  // جلب الشركاء
+  useEffect(() => {
+    const fetchPartners = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'partners'));
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Partner));
+        setPartners(data);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchPartners();
   }, []);
 
   useEffect(() => {
@@ -124,6 +146,12 @@ export default function Home() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
         * { font-family: 'Cairo', sans-serif; }
+        @keyframes marquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .animate-marquee { animation: marquee 20s linear infinite; }
+        .animate-marquee:hover { animation-play-state: paused; }
       `}</style>
 
       {/* Navbar */}
@@ -138,14 +166,13 @@ export default function Home() {
 
           <div className="flex items-center gap-3">
             <a href="#artists" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">المعلقون</a>
+            <a href="#partners" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">شركاؤنا</a>
             <a href="#pricing" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">الباقات</a>
 
-            {/* نخفي الأزرار حتى يكتمل التحميل */}
             {!mounted ? (
               <div className="w-32 h-10 bg-gray-100 rounded-full animate-pulse" />
             ) : (
               <>
-                {/* زائر */}
                 {userRole === 'visitor' && (
                   <>
                     <Link href="/login" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">دخول</Link>
@@ -155,7 +182,6 @@ export default function Home() {
                   </>
                 )}
 
-                {/* معلق صوتي */}
                 {userRole === 'artist' && loggedInArtist && (
                   <div className="flex items-center gap-3">
                     <span className="text-gray-700 font-black hidden md:block">
@@ -166,10 +192,8 @@ export default function Home() {
                       <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-600 rounded-full border-2 border-white"></span>
                     </button>
                     <div className="relative">
-                      <button
-                        onClick={() => setShowUserMenu(!showUserMenu)}
-                        className="flex items-center gap-2 bg-gray-900 text-white py-2 px-4 rounded-full font-black text-sm hover:bg-red-600 transition"
-                      >
+                      <button onClick={() => setShowUserMenu(!showUserMenu)}
+                        className="flex items-center gap-2 bg-gray-900 text-white py-2 px-4 rounded-full font-black text-sm hover:bg-red-600 transition">
                         <div className="w-6 h-6 rounded-full overflow-hidden bg-gray-600 flex-shrink-0">
                           {loggedInArtist.profilePicture ? (
                             <img src={loggedInArtist.profilePicture} alt="" className="w-full h-full object-cover" />
@@ -205,7 +229,6 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* عميل */}
                 {userRole === 'client' && (
                   <div className="flex items-center gap-3">
                     <button className="relative w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition">
@@ -232,7 +255,6 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* مدير */}
                 {userRole === 'admin' && (
                   <div className="flex items-center gap-3">
                     <Link href="/dashboard" className="bg-gray-900 text-white font-bold py-2 px-5 rounded-full hover:bg-red-600 transition text-sm flex items-center gap-2">
@@ -424,8 +446,42 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ===== شركاؤنا ===== */}
+      {partners.length > 0 && (
+        <section id="partners" className="py-20 bg-gray-50 overflow-hidden">
+          <div className="max-w-6xl mx-auto px-6 text-center mb-12">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <Building2 size={28} className="text-red-600" />
+              <h2 className="text-4xl font-black text-gray-900">شركاؤنا</h2>
+            </div>
+            <p className="text-gray-500 font-bold">مؤسسات وشركات وثقت بأصواتنا</p>
+          </div>
+
+          {/* شريط متحرك */}
+          <div className="relative">
+            <div className="flex animate-marquee gap-8 w-max">
+              {/* نكرر القائمة مرتين لتأثير اللانهاية */}
+              {[...partners, ...partners].map((partner, i) => (
+                <div key={i}
+                  className="flex-shrink-0 bg-white rounded-2xl px-8 py-6 shadow-sm border border-gray-100 flex flex-col items-center gap-3 min-w-[180px] hover:shadow-md hover:border-red-100 transition-all">
+                  {partner.logo ? (
+                    <img src={partner.logo} alt={partner.name}
+                      className="w-16 h-16 object-contain rounded-xl" />
+                  ) : (
+                    <div className="w-16 h-16 bg-red-50 rounded-xl flex items-center justify-center">
+                      <Building2 size={28} className="text-red-400" />
+                    </div>
+                  )}
+                  <p className="font-black text-gray-800 text-sm text-center">{partner.name}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Pricing */}
-      <section id="pricing" className="py-24 bg-gray-50">
+      <section id="pricing" className="py-24 bg-white">
         <div className="max-w-6xl mx-auto px-6 text-center">
           <h2 className="text-4xl font-black text-gray-900 mb-16">باقاتنا</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-right">
@@ -493,6 +549,7 @@ export default function Home() {
         <p className="text-gray-500 font-bold text-sm">إدارة وتأسيس: لميس حميمي © 2026 — جميع الحقوق محفوظة</p>
         <div className="flex justify-center gap-8 mt-8">
           <a href="#artists" className="text-gray-400 hover:text-white font-bold text-sm transition">المعلقون</a>
+          <a href="#partners" className="text-gray-400 hover:text-white font-bold text-sm transition">شركاؤنا</a>
           {mounted && userRole !== 'visitor' ? (
             <Link href={userRole === 'client' ? '/client-dashboard' : '/dashboard'}
               className="text-gray-400 hover:text-white font-bold text-sm transition">لوحة التحكم</Link>
