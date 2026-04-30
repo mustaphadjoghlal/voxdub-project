@@ -13,7 +13,7 @@ import Link from 'next/link';
 import {
   Mic2, Upload, LogOut, User, Music, Plus, Eye, Users, FileText,
   Bell, CheckCircle, Check, X, Trash2, Edit3, Save, Star,
-  MessageSquare, Mic, Package, Sparkles, Camera, BarChart3, Heart
+  MessageSquare, Mic, Package, Sparkles, Camera, BarChart3, Heart, TrendingUp
 } from 'lucide-react';
 
 const statusConfig: Record<string, { label: string; color: string }> = {
@@ -32,7 +32,7 @@ const statusOptions = [
   { value: 'completed',   label: 'مكتمل' },
 ];
 
-type TabType = 'overview' | 'audio' | 'profile' | 'reviews' | 'notifications' | 'artists' | 'orders';
+type TabType = 'overview' | 'audio' | 'profile' | 'reviews' | 'notifications' | 'artists' | 'orders' | 'stats';
 
 const Dashboard = () => {
   const { logout } = useAuth();
@@ -86,7 +86,6 @@ const Dashboard = () => {
           setAllArtists(artistsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
           const ordersSnap = await getDocs(collection(db, 'orders'));
           setAllOrders(ordersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-          // إشعارات المديرة
           const notifsSnap = await getDocs(
             query(collection(db, 'notifications'), where('artistId', '==', 'admin'))
           );
@@ -136,16 +135,12 @@ const Dashboard = () => {
     }
   }, [mounted, router]);
 
-  const sendNotification = async ({
-    artistId, title, body, type,
-  }: {
+  const sendNotification = async ({ artistId, title, body, type }: {
     artistId: string; title: string; body: string; type: string;
   }) => {
     try {
       await addDoc(collection(db, 'notifications'), {
-        artistId, title, body, type,
-        read: false,
-        createdAt: serverTimestamp(),
+        artistId, title, body, type, read: false, createdAt: serverTimestamp(),
       });
     } catch (err) { console.error('فشل إرسال الإشعار:', err); }
   };
@@ -234,14 +229,12 @@ const Dashboard = () => {
       const newSample = { name: sampleName, url, pendingApproval: true };
       await updateDoc(doc(db, 'artists', artist.id), { audioSamples: arrayUnion(newSample) });
       setArtist({ ...artist, audioSamples: [...(artist.audioSamples || []), newSample] });
-
       await sendNotification({
         artistId: 'admin',
         title: '🎙️ عينة صوتية جديدة بانتظار موافقتك',
         body: `رفع ${artist.name} عينة جديدة: "${sampleName}"`,
         type: 'new_sample',
       });
-
       setSampleName(''); setAudioSample(null);
     } catch (_) { alert('حدث خطأ.'); }
     setUploading(false);
@@ -345,16 +338,52 @@ const Dashboard = () => {
     const artistsWithPending = allArtists.filter(a => a.audioSamples?.some((s: any) => s.pendingApproval));
     const completedOrders = allOrders.filter(o => o.status === 'completed');
 
+    // بيانات الإحصائيات
+    const statusStats = statusOptions.map(s => ({
+      ...s,
+      count: allOrders.filter(o => o.status === s.value).length,
+      bgBar: s.value === 'pending' ? 'bg-amber-400' :
+             s.value === 'accepted' ? 'bg-blue-400' :
+             s.value === 'in_progress' ? 'bg-violet-400' :
+             s.value === 'review' ? 'bg-orange-400' : 'bg-emerald-400',
+    }));
+    const maxOrders = Math.max(...statusStats.map(s => s.count), 1);
+
+    const artistOrderCounts = allArtists.map(a => ({
+      name: a.name,
+      count: allOrders.filter(o => o.selectedVoiceActor === a.name).length,
+      pic: a.profilePicture,
+    })).sort((a, b) => b.count - a.count);
+    const maxArtistOrders = Math.max(...artistOrderCounts.map(a => a.count), 1);
+
+    const workTypeCounts: Record<string, number> = {};
+    allOrders.forEach(o => {
+      if (o.workType) workTypeCounts[o.workType] = (workTypeCounts[o.workType] || 0) + 1;
+    });
+    const workTypeStats = Object.entries(workTypeCounts)
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count);
+    const maxWorkType = Math.max(...workTypeStats.map(w => w.count), 1);
+
+    const packageCounts: Record<string, number> = {};
+    allOrders.forEach(o => {
+      if (o.selectedPackage) packageCounts[o.selectedPackage] = (packageCounts[o.selectedPackage] || 0) + 1;
+    });
+    const packageStats = Object.entries(packageCounts)
+      .map(([pkg, count]) => ({ pkg, count }))
+      .sort((a, b) => b.count - a.count);
+
     return (
       <div className="min-h-screen bg-gray-50" dir="rtl">
         <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap'); * { font-family: 'Cairo', sans-serif; }`}</style>
+
         <header className="bg-gray-900 text-white px-8 py-5 flex justify-between items-center sticky top-0 z-40 border-b border-white/5">
           <div className="flex items-center gap-3">
             <div className="bg-red-600 p-2 rounded-xl"><Mic2 className="w-5 h-5 text-white" /></div>
             <span className="text-xl font-black">Vox<span className="text-red-500">Dub</span> <span className="text-gray-400 font-bold text-sm">— لوحة المديرة</span></span>
           </div>
           <div className="flex items-center gap-4">
-            <button onClick={() => setActiveTab('notifications' as any)}
+            <button onClick={() => setActiveTab('notifications')}
               className="relative w-10 h-10 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20 transition">
               <Bell size={18} className="text-gray-300" />
               {adminUnreadCount > 0 && (
@@ -369,6 +398,8 @@ const Dashboard = () => {
         </header>
 
         <div className="max-w-7xl mx-auto px-6 py-10">
+
+          {/* إحصائيات سريعة */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             {[
               { label: 'إجمالي المعلقين', value: allArtists.length, color: 'bg-blue-500', icon: Users },
@@ -386,14 +417,16 @@ const Dashboard = () => {
             ))}
           </div>
 
-          <div className="flex gap-2 mb-8 bg-white p-2 rounded-2xl border border-gray-100 shadow-sm">
+          {/* Tabs */}
+          <div className="flex gap-2 mb-8 bg-white p-2 rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
             {[
               { key: 'artists', label: 'المعلقون', icon: Users },
               { key: 'orders', label: 'الطلبات', icon: FileText },
+              { key: 'stats', label: 'الإحصائيات', icon: BarChart3 },
               { key: 'notifications', label: 'الإشعارات', icon: Bell },
             ].map(tab => (
-              <button key={tab.key} onClick={() => setActiveTab(tab.key as any)}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-sm transition-all ${activeTab === tab.key ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-900'}`}>
+              <button key={tab.key} onClick={() => setActiveTab(tab.key as TabType)}
+                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-sm transition-all whitespace-nowrap ${activeTab === tab.key ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-900'}`}>
                 <tab.icon size={16} />{tab.label}
                 {tab.key === 'artists' && artistsWithPending.length > 0 && (
                   <span className="bg-red-600 text-white text-xs px-2 py-0.5 rounded-full">{artistsWithPending.length}</span>
@@ -405,6 +438,7 @@ const Dashboard = () => {
             ))}
           </div>
 
+          {/* ===== تبويب المعلقين ===== */}
           {activeTab === 'artists' && (
             <div className="space-y-6">
               {artistsWithPending.length > 0 && (
@@ -468,6 +502,7 @@ const Dashboard = () => {
             </div>
           )}
 
+          {/* ===== تبويب الطلبات ===== */}
           {activeTab === 'orders' && (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               {allOrders.length === 0 ? (
@@ -499,8 +534,187 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* إشعارات المديرة */}
-          {activeTab === ('notifications' as any) && (
+          {/* ===== تبويب الإحصائيات ===== */}
+          {activeTab === 'stats' && (
+            <div className="space-y-6">
+
+              {/* توزيع حالات الطلبات */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-8 py-5 border-b border-gray-100 flex items-center gap-2">
+                  <BarChart3 size={20} className="text-violet-600" />
+                  <h2 className="text-lg font-black text-gray-900">توزيع حالات الطلبات</h2>
+                  <span className="text-gray-400 font-bold text-sm mr-auto">{allOrders.length} طلب إجمالي</span>
+                </div>
+                <div className="p-8">
+                  {allOrders.length === 0 ? (
+                    <p className="text-gray-400 font-bold text-center py-8">لا توجد طلبات بعد</p>
+                  ) : (
+                    <>
+                      <div className="space-y-4 mb-8">
+                        {statusStats.map(s => (
+                          <div key={s.value}>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className={`text-xs font-black px-2 py-0.5 rounded-full ${statusConfig[s.value]?.color}`}>{s.label}</span>
+                              <span className="font-black text-gray-900 text-sm">{s.count} طلب</span>
+                            </div>
+                            <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full transition-all duration-700 ${s.bgBar}`}
+                                style={{ width: `${(s.count / maxOrders) * 100}%` }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* دائرة بيانية */}
+                      <div className="flex items-center justify-center gap-8 flex-wrap">
+                        <div className="relative w-36 h-36">
+                          <svg viewBox="0 0 36 36" className="w-36 h-36 -rotate-90">
+                            {(() => {
+                              const colors = ['#f59e0b', '#3b82f6', '#8b5cf6', '#f97316', '#10b981'];
+                              let offset = 0;
+                              return statusStats.map((s, i) => {
+                                const pct = allOrders.length ? (s.count / allOrders.length) * 100 : 0;
+                                const el = (
+                                  <circle key={s.value} cx="18" cy="18" r="15.9"
+                                    fill="none" stroke={colors[i]} strokeWidth="3.5"
+                                    strokeDasharray={`${pct} ${100 - pct}`}
+                                    strokeDashoffset={-offset} />
+                                );
+                                offset += pct;
+                                return el;
+                              });
+                            })()}
+                          </svg>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-2xl font-black text-gray-900">{allOrders.length}</span>
+                            <span className="text-xs text-gray-400 font-bold">طلب</span>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          {statusStats.filter(s => s.count > 0).map((s, i) => {
+                            const colors = ['bg-amber-400', 'bg-blue-400', 'bg-violet-400', 'bg-orange-400', 'bg-emerald-400'];
+                            return (
+                              <div key={s.value} className="flex items-center gap-2">
+                                <div className={`w-3 h-3 rounded-full ${colors[i]}`} />
+                                <span className="text-xs font-bold text-gray-600">{s.label}</span>
+                                <span className="text-xs font-black text-gray-900 mr-2">{s.count}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* المعلقون الأكثر طلباً */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-8 py-5 border-b border-gray-100 flex items-center gap-2">
+                  <TrendingUp size={20} className="text-red-600" />
+                  <h2 className="text-lg font-black text-gray-900">المعلقون الأكثر طلباً</h2>
+                </div>
+                <div className="p-8">
+                  {artistOrderCounts.filter(a => a.count > 0).length === 0 ? (
+                    <p className="text-gray-400 font-bold text-center py-8">لا توجد طلبات بعد</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {artistOrderCounts.slice(0, 5).map((a, i) => (
+                        <div key={a.name} className="flex items-center gap-4">
+                          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 ${i === 0 ? 'bg-amber-400 text-white' : i === 1 ? 'bg-gray-300 text-gray-700' : i === 2 ? 'bg-orange-300 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                            {i + 1}
+                          </span>
+                          <div className="w-9 h-9 rounded-full overflow-hidden bg-gray-200 flex-shrink-0">
+                            {a.pic ? <img src={a.pic} alt={a.name} className="w-full h-full object-cover" />
+                              : <div className="w-full h-full flex items-center justify-center font-black text-gray-400 text-sm">{a.name?.[0]}</div>}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-black text-gray-900 text-sm">{a.name}</span>
+                              <span className="font-black text-gray-500 text-xs">{a.count} طلب</span>
+                            </div>
+                            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-red-500 rounded-full transition-all duration-700"
+                                style={{ width: `${(a.count / maxArtistOrders) * 100}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* أنواع الأعمال + الباقات */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
+                    <FileText size={18} className="text-blue-600" />
+                    <h2 className="font-black text-gray-900">أنواع الأعمال</h2>
+                  </div>
+                  <div className="p-6">
+                    {workTypeStats.length === 0 ? (
+                      <p className="text-gray-400 font-bold text-center py-6">لا توجد بيانات</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {workTypeStats.map(w => (
+                          <div key={w.type}>
+                            <div className="flex justify-between mb-1">
+                              <span className="text-sm font-bold text-gray-700">{w.type}</span>
+                              <span className="text-sm font-black text-gray-900">{w.count}</span>
+                            </div>
+                            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-blue-500 rounded-full"
+                                style={{ width: `${(w.count / maxWorkType) * 100}%` }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
+                    <Package size={18} className="text-emerald-600" />
+                    <h2 className="font-black text-gray-900">الباقات الأكثر طلباً</h2>
+                  </div>
+                  <div className="p-6">
+                    {packageStats.length === 0 ? (
+                      <p className="text-gray-400 font-bold text-center py-6">لا توجد بيانات</p>
+                    ) : (
+                      <div className="space-y-4">
+                        {packageStats.map((p, i) => {
+                          const colors = ['bg-emerald-500', 'bg-blue-500', 'bg-violet-500'];
+                          const pct = allOrders.length ? Math.round((p.count / allOrders.length) * 100) : 0;
+                          return (
+                            <div key={p.pkg} className="flex items-start gap-3">
+                              <div className={`w-3 h-3 rounded-full mt-1.5 flex-shrink-0 ${colors[i] || 'bg-gray-400'}`} />
+                              <div className="flex-1">
+                                <div className="flex justify-between mb-1">
+                                  <span className="text-xs font-bold text-gray-700">{p.pkg}</span>
+                                  <span className="text-xs font-black text-gray-900">{pct}%</span>
+                                </div>
+                                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                  <div className={`h-full rounded-full ${colors[i] || 'bg-gray-400'}`}
+                                    style={{ width: `${pct}%` }} />
+                                </div>
+                                <p className="text-xs text-gray-400 font-bold mt-0.5">{p.count} طلب</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* ===== تبويب الإشعارات ===== */}
+          {activeTab === 'notifications' && (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="px-8 py-5 border-b border-gray-100 flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -522,10 +736,7 @@ const Dashboard = () => {
                 <div className="divide-y divide-gray-50">
                   {adminNotifications.sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds).map((n: any) => (
                     <div key={n.id} className={`px-8 py-5 flex items-start gap-4 ${!n.read ? 'bg-red-50' : 'hover:bg-gray-50'} transition`}>
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                        n.type === 'new_order' ? 'bg-blue-100' :
-                        n.type === 'new_sample' ? 'bg-amber-100' : 'bg-gray-100'
-                      }`}>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${n.type === 'new_order' ? 'bg-blue-100' : n.type === 'new_sample' ? 'bg-amber-100' : 'bg-gray-100'}`}>
                         {n.type === 'new_order' ? <Package size={18} className="text-blue-600" /> :
                          n.type === 'new_sample' ? <Mic size={18} className="text-amber-600" /> :
                          <Bell size={18} className="text-gray-600" />}
@@ -533,11 +744,7 @@ const Dashboard = () => {
                       <div className="flex-1">
                         <p className={`font-black text-sm ${!n.read ? 'text-gray-900' : 'text-gray-500'}`}>{n.title}</p>
                         {n.body && <p className="text-gray-400 font-bold text-xs mt-0.5">{n.body}</p>}
-                        {n.createdAt && (
-                          <p className="text-gray-300 text-xs font-bold mt-1">
-                            {new Date(n.createdAt?.toDate?.() || n.createdAt).toLocaleDateString('ar-DZ')}
-                          </p>
-                        )}
+                        {n.createdAt && <p className="text-gray-300 text-xs font-bold mt-1">{new Date(n.createdAt?.toDate?.() || n.createdAt).toLocaleDateString('ar-DZ')}</p>}
                       </div>
                       {!n.read && <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0 mt-2" />}
                     </div>
@@ -546,6 +753,7 @@ const Dashboard = () => {
               )}
             </div>
           )}
+
         </div>
       </div>
     );
@@ -559,10 +767,10 @@ const Dashboard = () => {
 
   const tabs = [
     { key: 'overview',      label: 'نظرة عامة',  icon: BarChart3 },
-    { key: 'audio',         label: 'العينات',     icon: Music,    badge: pendingSamples.length },
+    { key: 'audio',         label: 'العينات',     icon: Music,   badge: pendingSamples.length },
     { key: 'profile',       label: 'الملف',       icon: User },
-    { key: 'reviews',       label: 'التقييمات',   icon: Star,     badge: reviews.length },
-    { key: 'notifications', label: 'الإشعارات',  icon: Bell,     badge: unreadCount },
+    { key: 'reviews',       label: 'التقييمات',   icon: Star,    badge: reviews.length },
+    { key: 'notifications', label: 'الإشعارات',  icon: Bell,    badge: unreadCount },
   ];
 
   return (
@@ -974,6 +1182,7 @@ const Dashboard = () => {
             </div>
           </div>
         )}
+
       </div>
     </div>
   );
