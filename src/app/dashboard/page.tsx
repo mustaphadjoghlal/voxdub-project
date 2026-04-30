@@ -14,7 +14,7 @@ import {
   Mic2, Upload, LogOut, User, Music, Plus, Eye, Users, FileText,
   Bell, CheckCircle, Check, X, Trash2, Edit3, Save, Star,
   MessageSquare, Mic, Package, Sparkles, Camera, BarChart3, Heart,
-  TrendingUp, Building2
+  TrendingUp, Building2, UserCheck, Phone, Mail, Briefcase
 } from 'lucide-react';
 
 const statusConfig: Record<string, { label: string; color: string }> = {
@@ -33,7 +33,7 @@ const statusOptions = [
   { value: 'completed',   label: 'مكتمل' },
 ];
 
-type TabType = 'overview' | 'audio' | 'profile' | 'reviews' | 'notifications' | 'artists' | 'orders' | 'stats' | 'partners';
+type TabType = 'overview' | 'audio' | 'profile' | 'reviews' | 'notifications' | 'artists' | 'orders' | 'stats' | 'partners' | 'clients';
 
 const Dashboard = () => {
   const { logout } = useAuth();
@@ -43,14 +43,15 @@ const Dashboard = () => {
   const [allArtists, setAllArtists] = useState<any[]>([]);
   const [allOrders, setAllOrders] = useState<any[]>([]);
   const [allPartners, setAllPartners] = useState<any[]>([]);
+  const [allClients, setAllClients] = useState<any[]>([]);
   const [adminNotifications, setAdminNotifications] = useState<any[]>([]);
   const [adminUnreadCount, setAdminUnreadCount] = useState(0);
   const [artistOrders, setArtistOrders] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [promotingClientId, setPromotingClientId] = useState<string | null>(null);
 
-  // حقول الشريك الجديد
   const [newPartnerName, setNewPartnerName] = useState('');
   const [newPartnerLogo, setNewPartnerLogo] = useState<File | null>(null);
   const [addingPartner, setAddingPartner] = useState(false);
@@ -96,6 +97,8 @@ const Dashboard = () => {
           setAllOrders(ordersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
           const partnersSnap = await getDocs(collection(db, 'partners'));
           setAllPartners(partnersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+          const clientsSnap = await getDocs(collection(db, 'clients'));
+          setAllClients(clientsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
           const notifsSnap = await getDocs(
             query(collection(db, 'notifications'), where('artistId', '==', 'admin'))
           );
@@ -115,24 +118,17 @@ const Dashboard = () => {
             setArtist(data);
             setBioValue(data.bio || '');
             setTaglineValue(data.tagline || '');
-
             const ordersSnap = await getDocs(collection(db, 'orders'));
             const myOrders = ordersSnap.docs
               .map(d => ({ id: d.id, ...d.data() } as any))
               .filter(o => o.selectedVoiceActor === data.name);
             setArtistOrders(myOrders);
-
             try {
-              const reviewsSnap = await getDocs(
-                query(collection(db, 'reviews'), where('artistId', '==', userId))
-              );
+              const reviewsSnap = await getDocs(query(collection(db, 'reviews'), where('artistId', '==', userId)));
               setReviews(reviewsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
             } catch (_) {}
-
             try {
-              const notifsSnap = await getDocs(
-                query(collection(db, 'notifications'), where('artistId', '==', userId))
-              );
+              const notifsSnap = await getDocs(query(collection(db, 'notifications'), where('artistId', '==', userId)));
               const notifs = notifsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
               setNotifications(notifs);
               setUnreadCount(notifs.filter((n: any) => !n.read).length);
@@ -152,10 +148,33 @@ const Dashboard = () => {
       await addDoc(collection(db, 'notifications'), {
         artistId, title, body, type, read: false, createdAt: serverTimestamp(),
       });
-    } catch (err) { console.error('فشل إرسال الإشعار:', err); }
+    } catch (err) { console.error(err); }
   };
 
-  // إضافة شريك جديد
+  // ترقية عميل إلى شريك
+  const handlePromoteToPartner = async (client: any) => {
+    if (!confirm(`هل تريد ترقية "${client.name}" ليصبح شريكاً؟`)) return;
+    setPromotingClientId(client.id);
+    try {
+      // تحقق أنه مش موجود أصلاً
+      const alreadyPartner = allPartners.some(p => p.name === client.name);
+      if (alreadyPartner) {
+        alert('هذا العميل موجود بالفعل في قائمة الشركاء');
+        setPromotingClientId(null);
+        return;
+      }
+      const docRef = await addDoc(collection(db, 'partners'), {
+        name: client.name,
+        logo: client.logo || '',
+        promotedFrom: client.id,
+        createdAt: serverTimestamp(),
+      });
+      setAllPartners(prev => [...prev, { id: docRef.id, name: client.name, logo: client.logo || '' }]);
+      alert(`✅ تمت ترقية ${client.name} إلى شريك بنجاح!`);
+    } catch (err) { alert('حدث خطأ.'); }
+    setPromotingClientId(null);
+  };
+
   const handleAddPartner = async () => {
     if (!newPartnerName.trim()) return;
     setAddingPartner(true);
@@ -167,18 +186,14 @@ const Dashboard = () => {
         logoUrl = await getDownloadURL(storageRef);
       }
       const docRef = await addDoc(collection(db, 'partners'), {
-        name: newPartnerName.trim(),
-        logo: logoUrl,
-        createdAt: serverTimestamp(),
+        name: newPartnerName.trim(), logo: logoUrl, createdAt: serverTimestamp(),
       });
       setAllPartners(prev => [...prev, { id: docRef.id, name: newPartnerName.trim(), logo: logoUrl }]);
-      setNewPartnerName('');
-      setNewPartnerLogo(null);
+      setNewPartnerName(''); setNewPartnerLogo(null);
     } catch (err) { alert('حدث خطأ.'); }
     setAddingPartner(false);
   };
 
-  // حذف شريك
   const handleDeletePartner = async (partnerId: string) => {
     if (!confirm('هل تريد حذف هذا الشريك؟')) return;
     setDeletingPartnerId(partnerId);
@@ -190,10 +205,8 @@ const Dashboard = () => {
   };
 
   const togglePlay = (url: string, idx: number) => {
-    if (playingIdx === idx) {
-      audioRef.current?.pause();
-      setPlayingIdx(null);
-    } else {
+    if (playingIdx === idx) { audioRef.current?.pause(); setPlayingIdx(null); }
+    else {
       if (audioRef.current) audioRef.current.pause();
       const a = new Audio(url);
       a.play().catch(() => {});
@@ -257,8 +270,7 @@ const Dashboard = () => {
       const url = await getDownloadURL(storageRef);
       await updateDoc(doc(db, 'artists', artist.id), { profilePicture: url });
       setArtist({ ...artist, profilePicture: url });
-      setProfilePicPreview(null);
-      setProfilePic(null);
+      setProfilePicPreview(null); setProfilePic(null);
     } catch (_) { alert('حدث خطأ.'); }
     setUploading(false);
   };
@@ -353,10 +365,7 @@ const Dashboard = () => {
     } catch (err) { console.error(err); }
   };
 
-  const handleLogout = async () => {
-    await logout();
-    router.push('/login');
-  };
+  const handleLogout = async () => { await logout(); router.push('/login'); };
 
   const avgRating = reviews.length
     ? (reviews.reduce((s: number, r: any) => s + (r.rating || 0), 0) / reviews.length).toFixed(1)
@@ -385,36 +394,24 @@ const Dashboard = () => {
     const statusStats = statusOptions.map(s => ({
       ...s,
       count: allOrders.filter(o => o.status === s.value).length,
-      bgBar: s.value === 'pending' ? 'bg-amber-400' :
-             s.value === 'accepted' ? 'bg-blue-400' :
-             s.value === 'in_progress' ? 'bg-violet-400' :
-             s.value === 'review' ? 'bg-orange-400' : 'bg-emerald-400',
+      bgBar: s.value === 'pending' ? 'bg-amber-400' : s.value === 'accepted' ? 'bg-blue-400' :
+             s.value === 'in_progress' ? 'bg-violet-400' : s.value === 'review' ? 'bg-orange-400' : 'bg-emerald-400',
     }));
     const maxOrders = Math.max(...statusStats.map(s => s.count), 1);
 
     const artistOrderCounts = allArtists.map(a => ({
-      name: a.name,
-      count: allOrders.filter(o => o.selectedVoiceActor === a.name).length,
-      pic: a.profilePicture,
+      name: a.name, count: allOrders.filter(o => o.selectedVoiceActor === a.name).length, pic: a.profilePicture,
     })).sort((a, b) => b.count - a.count);
     const maxArtistOrders = Math.max(...artistOrderCounts.map(a => a.count), 1);
 
     const workTypeCounts: Record<string, number> = {};
-    allOrders.forEach(o => {
-      if (o.workType) workTypeCounts[o.workType] = (workTypeCounts[o.workType] || 0) + 1;
-    });
-    const workTypeStats = Object.entries(workTypeCounts)
-      .map(([type, count]) => ({ type, count }))
-      .sort((a, b) => b.count - a.count);
+    allOrders.forEach(o => { if (o.workType) workTypeCounts[o.workType] = (workTypeCounts[o.workType] || 0) + 1; });
+    const workTypeStats = Object.entries(workTypeCounts).map(([type, count]) => ({ type, count })).sort((a, b) => b.count - a.count);
     const maxWorkType = Math.max(...workTypeStats.map(w => w.count), 1);
 
     const packageCounts: Record<string, number> = {};
-    allOrders.forEach(o => {
-      if (o.selectedPackage) packageCounts[o.selectedPackage] = (packageCounts[o.selectedPackage] || 0) + 1;
-    });
-    const packageStats = Object.entries(packageCounts)
-      .map(([pkg, count]) => ({ pkg, count }))
-      .sort((a, b) => b.count - a.count);
+    allOrders.forEach(o => { if (o.selectedPackage) packageCounts[o.selectedPackage] = (packageCounts[o.selectedPackage] || 0) + 1; });
+    const packageStats = Object.entries(packageCounts).map(([pkg, count]) => ({ pkg, count })).sort((a, b) => b.count - a.count);
 
     return (
       <div className="min-h-screen bg-gray-50" dir="rtl">
@@ -429,9 +426,7 @@ const Dashboard = () => {
             <button onClick={() => setActiveTab('notifications')}
               className="relative w-10 h-10 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20 transition">
               <Bell size={18} className="text-gray-300" />
-              {adminUnreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 rounded-full text-white text-xs font-black flex items-center justify-center">{adminUnreadCount}</span>
-              )}
+              {adminUnreadCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 rounded-full text-white text-xs font-black flex items-center justify-center">{adminUnreadCount}</span>}
             </button>
             <Link href="/" className="text-gray-400 hover:text-white font-bold text-sm transition">الواجهة الرئيسية</Link>
             <button onClick={handleLogout} className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-full font-black text-sm hover:bg-red-700 transition">
@@ -442,10 +437,11 @@ const Dashboard = () => {
 
         <div className="max-w-7xl mx-auto px-6 py-10">
 
+          {/* إحصائيات سريعة */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             {[
               { label: 'إجمالي المعلقين', value: allArtists.length, color: 'bg-blue-500', icon: Users },
-              { label: 'عينات بانتظار الموافقة', value: artistsWithPending.length, color: 'bg-amber-500', icon: Bell },
+              { label: 'العملاء المسجلون', value: allClients.length, color: 'bg-indigo-500', icon: User },
               { label: 'إجمالي الطلبات', value: allOrders.length, color: 'bg-violet-500', icon: FileText },
               { label: 'طلبات مكتملة', value: completedOrders.length, color: 'bg-emerald-500', icon: CheckCircle },
             ].map((stat, i) => (
@@ -462,11 +458,12 @@ const Dashboard = () => {
           {/* Tabs */}
           <div className="flex gap-2 mb-8 bg-white p-2 rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
             {[
-              { key: 'artists',       label: 'المعلقون',     icon: Users },
-              { key: 'orders',        label: 'الطلبات',      icon: FileText },
-              { key: 'stats',         label: 'الإحصائيات',   icon: BarChart3 },
-              { key: 'partners',      label: 'الشركاء',      icon: Building2 },
-              { key: 'notifications', label: 'الإشعارات',    icon: Bell },
+              { key: 'artists',       label: 'المعلقون',   icon: Users },
+              { key: 'clients',       label: 'العملاء',    icon: User },
+              { key: 'orders',        label: 'الطلبات',    icon: FileText },
+              { key: 'stats',         label: 'الإحصائيات', icon: BarChart3 },
+              { key: 'partners',      label: 'الشركاء',    icon: Building2 },
+              { key: 'notifications', label: 'الإشعارات',  icon: Bell },
             ].map(tab => (
               <button key={tab.key} onClick={() => setActiveTab(tab.key as TabType)}
                 className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-sm transition-all whitespace-nowrap ${activeTab === tab.key ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-900'}`}>
@@ -534,14 +531,91 @@ const Dashboard = () => {
                         <div className="flex items-center gap-3">
                           <span className={`px-3 py-1 rounded-full text-xs font-black ${approved.length > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{approved.length} معتمدة</span>
                           {pending.length > 0 && <span className="px-3 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-700">{pending.length} انتظار</span>}
-                          <Link href={`/artists/${a.id}`} className="flex items-center gap-1 text-gray-500 hover:text-red-600 font-bold text-sm transition"><Eye size={16} /></Link>
-                          <button onClick={() => handleDeleteArtist(a.id, a.name)} disabled={deletingId === a.id} className="flex items-center gap-1 text-red-400 hover:text-red-600 font-bold text-sm transition disabled:text-gray-300"><Trash2 size={16} /></button>
+                          <Link href={`/artists/${a.id}`} className="text-gray-500 hover:text-red-600 transition"><Eye size={16} /></Link>
+                          <button onClick={() => handleDeleteArtist(a.id, a.name)} disabled={deletingId === a.id} className="text-red-400 hover:text-red-600 transition disabled:text-gray-300"><Trash2 size={16} /></button>
                         </div>
                       </div>
                     );
                   })}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ===== تبويب العملاء ===== */}
+          {activeTab === 'clients' && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-8 py-5 border-b border-gray-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg font-black text-gray-900">العملاء المسجلون</h2>
+                  <span className="bg-indigo-100 text-indigo-700 text-xs font-black px-3 py-1 rounded-full">{allClients.length} عميل</span>
+                </div>
+              </div>
+              {allClients.length === 0 ? (
+                <div className="p-16 text-center">
+                  <User size={48} className="text-gray-200 mx-auto mb-4" />
+                  <p className="text-gray-400 font-black text-lg">لا يوجد عملاء بعد</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-50">
+                  {allClients.map(client => {
+                    const isPartner = allPartners.some(p => p.name === client.name);
+                    const clientOrders = allOrders.filter(o => o.clientName === client.name);
+                    return (
+                      <div key={client.id} className="px-8 py-5 flex items-center justify-between hover:bg-gray-50 transition gap-4">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center text-white font-black text-lg flex-shrink-0">
+                            {client.name?.[0] || 'ع'}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="font-black text-gray-900">{client.name}</p>
+                              {isPartner && (
+                                <span className="bg-emerald-100 text-emerald-700 text-xs font-black px-2 py-0.5 rounded-full">شريك ✓</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-4 mt-1">
+                              {client.email && (
+                                <span className="flex items-center gap-1 text-gray-400 text-xs font-bold">
+                                  <Mail size={11} /> {client.email}
+                                </span>
+                              )}
+                              {client.company && (
+                                <span className="flex items-center gap-1 text-gray-400 text-xs font-bold">
+                                  <Briefcase size={11} /> {client.company}
+                                </span>
+                              )}
+                              {client.phone && (
+                                <span className="flex items-center gap-1 text-gray-400 text-xs font-bold">
+                                  <Phone size={11} /> {client.phone}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <span className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                            {clientOrders.length} طلب
+                          </span>
+                          {!isPartner ? (
+                            <button
+                              onClick={() => handlePromoteToPartner(client)}
+                              disabled={promotingClientId === client.id}
+                              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-full font-black text-xs hover:bg-indigo-700 disabled:bg-gray-200 disabled:text-gray-400 transition">
+                              <UserCheck size={14} />
+                              {promotingClientId === client.id ? 'جاري...' : 'ترقية إلى شريك'}
+                            </button>
+                          ) : (
+                            <span className="flex items-center gap-1 text-emerald-600 font-black text-xs">
+                              <Building2 size={14} /> شريك معتمد
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -599,8 +673,7 @@ const Dashboard = () => {
                               <span className="font-black text-gray-900 text-sm">{s.count} طلب</span>
                             </div>
                             <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
-                              <div className={`h-full rounded-full transition-all duration-700 ${s.bgBar}`}
-                                style={{ width: `${(s.count / maxOrders) * 100}%` }} />
+                              <div className={`h-full rounded-full transition-all duration-700 ${s.bgBar}`} style={{ width: `${(s.count / maxOrders) * 100}%` }} />
                             </div>
                           </div>
                         ))}
@@ -613,14 +686,8 @@ const Dashboard = () => {
                               let offset = 0;
                               return statusStats.map((s, i) => {
                                 const pct = allOrders.length ? (s.count / allOrders.length) * 100 : 0;
-                                const el = (
-                                  <circle key={s.value} cx="18" cy="18" r="15.9"
-                                    fill="none" stroke={colors[i]} strokeWidth="3.5"
-                                    strokeDasharray={`${pct} ${100 - pct}`}
-                                    strokeDashoffset={-offset} />
-                                );
-                                offset += pct;
-                                return el;
+                                const el = (<circle key={s.value} cx="18" cy="18" r="15.9" fill="none" stroke={colors[i]} strokeWidth="3.5" strokeDasharray={`${pct} ${100 - pct}`} strokeDashoffset={-offset} />);
+                                offset += pct; return el;
                               });
                             })()}
                           </svg>
@@ -659,12 +726,9 @@ const Dashboard = () => {
                     <div className="space-y-4">
                       {artistOrderCounts.slice(0, 5).map((a, i) => (
                         <div key={a.name} className="flex items-center gap-4">
-                          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 ${i === 0 ? 'bg-amber-400 text-white' : i === 1 ? 'bg-gray-300 text-gray-700' : i === 2 ? 'bg-orange-300 text-white' : 'bg-gray-100 text-gray-500'}`}>
-                            {i + 1}
-                          </span>
+                          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 ${i === 0 ? 'bg-amber-400 text-white' : i === 1 ? 'bg-gray-300 text-gray-700' : i === 2 ? 'bg-orange-300 text-white' : 'bg-gray-100 text-gray-500'}`}>{i + 1}</span>
                           <div className="w-9 h-9 rounded-full overflow-hidden bg-gray-200 flex-shrink-0">
-                            {a.pic ? <img src={a.pic} alt={a.name} className="w-full h-full object-cover" />
-                              : <div className="w-full h-full flex items-center justify-center font-black text-gray-400 text-sm">{a.name?.[0]}</div>}
+                            {a.pic ? <img src={a.pic} alt={a.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center font-black text-gray-400 text-sm">{a.name?.[0]}</div>}
                           </div>
                           <div className="flex-1">
                             <div className="flex items-center justify-between mb-1">
@@ -672,8 +736,7 @@ const Dashboard = () => {
                               <span className="font-black text-gray-500 text-xs">{a.count} طلب</span>
                             </div>
                             <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                              <div className="h-full bg-red-500 rounded-full"
-                                style={{ width: `${(a.count / maxArtistOrders) * 100}%` }} />
+                              <div className="h-full bg-red-500 rounded-full" style={{ width: `${(a.count / maxArtistOrders) * 100}%` }} />
                             </div>
                           </div>
                         </div>
@@ -690,9 +753,7 @@ const Dashboard = () => {
                     <h2 className="font-black text-gray-900">أنواع الأعمال</h2>
                   </div>
                   <div className="p-6">
-                    {workTypeStats.length === 0 ? (
-                      <p className="text-gray-400 font-bold text-center py-6">لا توجد بيانات</p>
-                    ) : (
+                    {workTypeStats.length === 0 ? <p className="text-gray-400 font-bold text-center py-6">لا توجد بيانات</p> : (
                       <div className="space-y-3">
                         {workTypeStats.map(w => (
                           <div key={w.type}>
@@ -701,8 +762,7 @@ const Dashboard = () => {
                               <span className="text-sm font-black text-gray-900">{w.count}</span>
                             </div>
                             <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                              <div className="h-full bg-blue-500 rounded-full"
-                                style={{ width: `${(w.count / maxWorkType) * 100}%` }} />
+                              <div className="h-full bg-blue-500 rounded-full" style={{ width: `${(w.count / maxWorkType) * 100}%` }} />
                             </div>
                           </div>
                         ))}
@@ -710,16 +770,13 @@ const Dashboard = () => {
                     )}
                   </div>
                 </div>
-
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
                     <Package size={18} className="text-emerald-600" />
                     <h2 className="font-black text-gray-900">الباقات الأكثر طلباً</h2>
                   </div>
                   <div className="p-6">
-                    {packageStats.length === 0 ? (
-                      <p className="text-gray-400 font-bold text-center py-6">لا توجد بيانات</p>
-                    ) : (
+                    {packageStats.length === 0 ? <p className="text-gray-400 font-bold text-center py-6">لا توجد بيانات</p> : (
                       <div className="space-y-4">
                         {packageStats.map((p, i) => {
                           const colors = ['bg-emerald-500', 'bg-blue-500', 'bg-violet-500'];
@@ -733,8 +790,7 @@ const Dashboard = () => {
                                   <span className="text-xs font-black text-gray-900">{pct}%</span>
                                 </div>
                                 <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                                  <div className={`h-full rounded-full ${colors[i] || 'bg-gray-400'}`}
-                                    style={{ width: `${pct}%` }} />
+                                  <div className={`h-full rounded-full ${colors[i] || 'bg-gray-400'}`} style={{ width: `${pct}%` }} />
                                 </div>
                                 <p className="text-xs text-gray-400 font-bold mt-0.5">{p.count} طلب</p>
                               </div>
@@ -752,7 +808,6 @@ const Dashboard = () => {
           {/* ===== تبويب الشركاء ===== */}
           {activeTab === 'partners' && (
             <div className="space-y-6">
-              {/* إضافة شريك جديد */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-8 py-5 border-b border-gray-100 flex items-center gap-2">
                   <Plus size={20} className="text-red-600" />
@@ -762,44 +817,31 @@ const Dashboard = () => {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                     <div className="md:col-span-1">
                       <label className="block text-sm font-black text-gray-700 mb-2">اسم الشركة / المؤسسة *</label>
-                      <input
-                        type="text"
-                        value={newPartnerName}
-                        onChange={e => setNewPartnerName(e.target.value)}
+                      <input type="text" value={newPartnerName} onChange={e => setNewPartnerName(e.target.value)}
                         placeholder="مثال: شركة الجزائر للإنتاج"
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition"
-                      />
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition" />
                     </div>
                     <div className="md:col-span-1">
                       <label className="block text-sm font-black text-gray-700 mb-2">شعار الشركة (اختياري)</label>
                       <div className="flex items-center gap-3">
-                        {newPartnerLogo && (
-                          <img src={URL.createObjectURL(newPartnerLogo)} alt="preview"
-                            className="w-12 h-12 rounded-xl object-contain border border-gray-200 flex-shrink-0" />
-                        )}
+                        {newPartnerLogo && <img src={URL.createObjectURL(newPartnerLogo)} alt="preview" className="w-12 h-12 rounded-xl object-contain border border-gray-200 flex-shrink-0" />}
                         <label className="flex-1 cursor-pointer flex items-center gap-2 px-4 py-3 rounded-xl border border-dashed border-gray-300 hover:border-red-400 transition text-gray-500 font-bold text-sm">
                           <Upload size={16} />
                           {newPartnerLogo ? newPartnerLogo.name : 'اختر صورة'}
-                          <input type="file" accept="image/*" className="hidden"
-                            onChange={e => setNewPartnerLogo(e.target.files?.[0] || null)} />
+                          <input type="file" accept="image/*" className="hidden" onChange={e => setNewPartnerLogo(e.target.files?.[0] || null)} />
                         </label>
                       </div>
                     </div>
                     <div>
-                      <button
-                        onClick={handleAddPartner}
-                        disabled={addingPartner || !newPartnerName.trim()}
-                        className="w-full bg-red-600 text-white py-3 rounded-xl font-black hover:bg-red-700 disabled:bg-gray-200 disabled:text-gray-400 transition flex items-center justify-center gap-2"
-                      >
-                        <Plus size={18} />
-                        {addingPartner ? 'جاري الإضافة...' : 'إضافة شريك'}
+                      <button onClick={handleAddPartner} disabled={addingPartner || !newPartnerName.trim()}
+                        className="w-full bg-red-600 text-white py-3 rounded-xl font-black hover:bg-red-700 disabled:bg-gray-200 disabled:text-gray-400 transition flex items-center justify-center gap-2">
+                        <Plus size={18} />{addingPartner ? 'جاري الإضافة...' : 'إضافة شريك'}
                       </button>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* قائمة الشركاء */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-8 py-5 border-b border-gray-100 flex items-center gap-2">
                   <Building2 size={20} className="text-blue-600" />
@@ -809,23 +851,18 @@ const Dashboard = () => {
                   <div className="p-16 text-center">
                     <Building2 size={48} className="text-gray-200 mx-auto mb-4" />
                     <p className="text-gray-400 font-black text-lg">لا يوجد شركاء بعد</p>
-                    <p className="text-gray-300 font-bold text-sm mt-2">أضف أول شريك من النموذج أعلاه</p>
+                    <p className="text-gray-300 font-bold text-sm mt-2">أضف أول شريك من النموذج أعلاه أو رقِّ عميلاً من تبويب العملاء</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-8">
                     {allPartners.map(partner => (
-                      <div key={partner.id}
-                        className="bg-gray-50 rounded-2xl p-4 border border-gray-100 flex flex-col items-center gap-3 relative group hover:border-red-100 hover:shadow-md transition">
-                        <button
-                          onClick={() => handleDeletePartner(partner.id)}
-                          disabled={deletingPartnerId === partner.id}
-                          className="absolute top-2 left-2 w-7 h-7 bg-red-100 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition hover:bg-red-600 hover:text-white text-red-500"
-                        >
+                      <div key={partner.id} className="bg-gray-50 rounded-2xl p-4 border border-gray-100 flex flex-col items-center gap-3 relative group hover:border-red-100 hover:shadow-md transition">
+                        <button onClick={() => handleDeletePartner(partner.id)} disabled={deletingPartnerId === partner.id}
+                          className="absolute top-2 left-2 w-7 h-7 bg-red-100 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition hover:bg-red-600 hover:text-white text-red-500">
                           <Trash2 size={13} />
                         </button>
                         {partner.logo ? (
-                          <img src={partner.logo} alt={partner.name}
-                            className="w-16 h-16 object-contain rounded-xl" />
+                          <img src={partner.logo} alt={partner.name} className="w-16 h-16 object-contain rounded-xl" />
                         ) : (
                           <div className="w-16 h-16 bg-red-50 rounded-xl flex items-center justify-center">
                             <Building2 size={28} className="text-red-300" />
@@ -855,18 +892,13 @@ const Dashboard = () => {
                 )}
               </div>
               {adminNotifications.length === 0 ? (
-                <div className="p-16 text-center">
-                  <Bell size={48} className="text-gray-200 mx-auto mb-4" />
-                  <p className="text-gray-400 font-black">لا توجد إشعارات</p>
-                </div>
+                <div className="p-16 text-center"><Bell size={48} className="text-gray-200 mx-auto mb-4" /><p className="text-gray-400 font-black">لا توجد إشعارات</p></div>
               ) : (
                 <div className="divide-y divide-gray-50">
                   {adminNotifications.sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds).map((n: any) => (
                     <div key={n.id} className={`px-8 py-5 flex items-start gap-4 ${!n.read ? 'bg-red-50' : 'hover:bg-gray-50'} transition`}>
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${n.type === 'new_order' ? 'bg-blue-100' : n.type === 'new_sample' ? 'bg-amber-100' : 'bg-gray-100'}`}>
-                        {n.type === 'new_order' ? <Package size={18} className="text-blue-600" /> :
-                         n.type === 'new_sample' ? <Mic size={18} className="text-amber-600" /> :
-                         <Bell size={18} className="text-gray-600" />}
+                        {n.type === 'new_order' ? <Package size={18} className="text-blue-600" /> : n.type === 'new_sample' ? <Mic size={18} className="text-amber-600" /> : <Bell size={18} className="text-gray-600" />}
                       </div>
                       <div className="flex-1">
                         <p className={`font-black text-sm ${!n.read ? 'text-gray-900' : 'text-gray-500'}`}>{n.title}</p>
@@ -920,9 +952,7 @@ const Dashboard = () => {
           <button onClick={() => setActiveTab('notifications')}
             className="relative w-10 h-10 glass rounded-full flex items-center justify-center hover:bg-white/10 transition">
             <Bell size={18} className="text-gray-300" />
-            {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 rounded-full text-white text-xs font-black flex items-center justify-center">{unreadCount}</span>
-            )}
+            {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 rounded-full text-white text-xs font-black flex items-center justify-center">{unreadCount}</span>}
           </button>
           <Link href="/" className="text-gray-400 hover:text-white font-bold text-sm transition hidden md:block">الرئيسية</Link>
           <button onClick={handleLogout} className="flex items-center gap-2 bg-red-600/20 text-red-400 px-4 py-2 rounded-full font-black text-sm hover:bg-red-600 hover:text-white transition border border-red-600/30">
@@ -939,8 +969,7 @@ const Dashboard = () => {
               <div className="w-24 h-24 rounded-2xl overflow-hidden bg-gray-800 border-2 border-red-600/40">
                 {artist?.profilePicture
                   ? <img src={artist.profilePicture} alt={artist.name} className="w-full h-full object-cover" />
-                  : <div className="w-full h-full flex items-center justify-center text-4xl font-black text-gray-500">{artist?.name?.[0]}</div>
-                }
+                  : <div className="w-full h-full flex items-center justify-center text-4xl font-black text-gray-500">{artist?.name?.[0]}</div>}
               </div>
               <button onClick={() => setActiveTab('profile')} className="absolute -bottom-2 -left-2 w-8 h-8 bg-red-600 rounded-full flex items-center justify-center hover:bg-red-700 transition shadow-lg">
                 <Camera size={14} className="text-white" />
@@ -952,7 +981,6 @@ const Dashboard = () => {
                 <h1 className="text-2xl font-black text-white">{artist?.name}</h1>
                 <span className="bg-red-600/20 text-red-400 text-xs font-black px-2 py-0.5 rounded-full border border-red-600/30">معلق</span>
               </div>
-
               <div className="flex items-center gap-2 justify-center md:justify-start mb-3">
                 {editingTagline ? (
                   <div className="flex items-center gap-2 w-full max-w-sm">
@@ -968,9 +996,7 @@ const Dashboard = () => {
                   </>
                 )}
               </div>
-
               <p className="text-gray-400 font-bold text-sm mb-4">{artist?.voiceType} · {artist?.gender}</p>
-
               <div className="flex flex-wrap gap-3 justify-center md:justify-start">
                 {[
                   { label: 'عينة معتمدة', value: approvedSamples.length },
@@ -1037,7 +1063,6 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
-
             <div className="glass rounded-2xl overflow-hidden">
               <div className="px-6 py-4 border-b border-white/5 flex items-center gap-2">
                 <Star size={18} className="text-amber-400" />
@@ -1090,7 +1115,6 @@ const Dashboard = () => {
                 </button>
               </div>
             </div>
-
             <div className="glass rounded-2xl overflow-hidden">
               <div className="px-6 py-4 border-b border-white/5">
                 <h2 className="text-white font-black">عيناتك ({(artist?.audioSamples || []).length})</h2>
@@ -1106,8 +1130,7 @@ const Dashboard = () => {
                           className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition ${playingIdx === i ? 'bg-red-600' : 'bg-white/10 hover:bg-red-600'}`}>
                           {playingIdx === i
                             ? <span className="w-3 h-3 border-2 border-white border-r-transparent rounded-full animate-spin" />
-                            : <svg viewBox="0 0 24 24" className="w-4 h-4 fill-white ml-0.5"><path d="M8 5v14l11-7z" /></svg>
-                          }
+                            : <svg viewBox="0 0 24 24" className="w-4 h-4 fill-white ml-0.5"><path d="M8 5v14l11-7z" /></svg>}
                         </button>
                         <div className="flex-1">
                           {editingSampleIdx === i ? (
@@ -1128,10 +1151,8 @@ const Dashboard = () => {
                         <div className="flex items-center gap-2 flex-shrink-0">
                           {sample.pendingApproval
                             ? <span className="text-xs font-black text-amber-400 bg-amber-400/10 px-2 py-1 rounded-full border border-amber-400/20">⏳ انتظار</span>
-                            : <span className="text-xs font-black text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full border border-emerald-400/20">✓ معتمدة</span>
-                          }
-                          <button onClick={() => handleDeleteSample(i)}
-                            className="w-7 h-7 bg-red-600/10 rounded-lg flex items-center justify-center hover:bg-red-600 transition group">
+                            : <span className="text-xs font-black text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full border border-emerald-400/20">✓ معتمدة</span>}
+                          <button onClick={() => handleDeleteSample(i)} className="w-7 h-7 bg-red-600/10 rounded-lg flex items-center justify-center hover:bg-red-600 transition group">
                             <Trash2 size={13} className="text-red-400 group-hover:text-white" />
                           </button>
                         </div>
@@ -1164,7 +1185,6 @@ const Dashboard = () => {
                 </button>
               </div>
             </div>
-
             <div className="glass rounded-2xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2"><Edit3 size={18} className="text-red-400" /><h2 className="text-white font-black">نبذة عنك (Bio)</h2></div>
@@ -1182,7 +1202,6 @@ const Dashboard = () => {
                 </div>
               ) : <p className="text-gray-400 font-bold text-sm leading-relaxed">{artist?.bio || <span className="text-gray-600 italic">لم تُضف نبذة بعد...</span>}</p>}
             </div>
-
             <div className="glass rounded-2xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2"><Sparkles size={18} className="text-red-400" /><h2 className="text-white font-black">الجملة التعريفية (Tagline)</h2></div>
@@ -1286,15 +1305,8 @@ const Dashboard = () => {
                 <div className="divide-y divide-white/5">
                   {notifications.sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds).map((n: any) => (
                     <div key={n.id} className={`px-6 py-4 flex items-start gap-3 transition ${!n.read ? 'bg-red-600/5' : 'hover:bg-white/3'}`}>
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                        n.type === 'new_order' ? 'bg-blue-600/20' :
-                        n.type === 'sample_approved' ? 'bg-emerald-600/20' :
-                        n.type === 'sample_rejected' ? 'bg-red-600/20' : 'bg-amber-600/20'
-                      }`}>
-                        {n.type === 'new_order' ? <Package size={16} className="text-blue-400" /> :
-                         n.type === 'sample_approved' ? <Check size={16} className="text-emerald-400" /> :
-                         n.type === 'sample_rejected' ? <X size={16} className="text-red-400" /> :
-                         <Bell size={16} className="text-amber-400" />}
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${n.type === 'new_order' ? 'bg-blue-600/20' : n.type === 'sample_approved' ? 'bg-emerald-600/20' : n.type === 'sample_rejected' ? 'bg-red-600/20' : 'bg-amber-600/20'}`}>
+                        {n.type === 'new_order' ? <Package size={16} className="text-blue-400" /> : n.type === 'sample_approved' ? <Check size={16} className="text-emerald-400" /> : n.type === 'sample_rejected' ? <X size={16} className="text-red-400" /> : <Bell size={16} className="text-amber-400" />}
                       </div>
                       <div className="flex-1">
                         <p className={`font-black text-sm ${!n.read ? 'text-white' : 'text-gray-400'}`}>{n.title || 'إشعار جديد'}</p>
