@@ -348,7 +348,7 @@ export function AdminPage() {
   const tabs = [
     { key: "info", label: "🏠 الرئيسية" }, { key: "about", label: "👤 عني" },
     { key: "media", label: "📺 المخرجات" }, { key: "articles", label: "📝 المقالات" },
-    { key: "clients", label: "🤝 العملاء" }, { key: "courses", label: "🎓 الدورات" }, { key: "footer", label: "📋 الفوتر" },
+    { key: "clients", label: "🤝 العملاء" }, { key: "courses", label: "🎓 الدورات" }, { key: "footer", label: "📋 التواصل" },
     { key: "works", label: "💼 الأعمال" },
   ];
   const subTabs = [
