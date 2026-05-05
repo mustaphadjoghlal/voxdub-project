@@ -4,27 +4,27 @@ export function Packages() {
   const packages = [
     { 
       name: "باقة التعليق الصوتي", 
-      price: "5000", 
+      price: "15,000", 
       featured: false,
       isGold: false,
       description: "مثالية للمشاريع القصيرة والإعلانات السريعة",
-      features: ["تسجيل صوتي احترافي (Raw)", "معدات تسجيل عالمية", "تعديل هندسي بسيط", "تسليم خلال 48 ساعة"]
+      features: ["تسجيل صوتي احترافي (Raw)", "معدات تسجيل عالمية", "تعديل هندسي بسيط", "تسليم خلال 48 ساعة", "مراجعة مجانية واحدة"]
     },
     { 
       name: "باقة التعليق والتدقيق", 
-      price: "8000", 
+      price: "25,000", 
       featured: true, 
-      isGold: true, // الباقة الذهبية المميزة
+      isGold: true,
       description: "الباقة الأكثر طلباً للمحتوى الوثائقي والتعليمي",
-      features: ["كل مميزات الباقة الأساسية", "تدقيق لغوي وتشكيل كامل", "هندسة صوتية متقدمة (Mixing)", "خيار الموسيقى الخلفية", "مراجعة واحدة مجانية"]
+      features: ["كل مميزات الباقة الأساسية", "تدقيق لغوي وتشكيل كامل", "تصحيح الأخطاء النحوية", "تحسين الصياغة", "هندسة صوتية متقدمة (Mixing)"]
     },
     { 
       name: "باقة كاملة المحتوى", 
-      price: "13000", 
+      price: "40,000", 
       featured: false,
       isGold: false,
       description: "حل متكامل من الفكرة وحتى النشر النهائي",
-      features: ["إعداد وكتابة السكريبت", "دبلجة احترافية متعددة الطبقات", "مؤثرات صوتية خاصة (SFX)", "حقوق استخدام تجاري كاملة", "دعم فني وتعديلات مفتوحة"]
+      features: ["كل مميزات الباقتين السابقتين", "كتابة النص من الصفر", "بحث وتطوير المحتوى", "كتابة إبداعية", "حقوق استخدام تجاري كاملة"]
     },
   ];
 
@@ -39,8 +39,8 @@ export function Packages() {
           {packages.map((pkg) => (
             <div key={pkg.name} className={`bg-white p-8 rounded-[32px] transition-all duration-500 border-2 shadow-xl ${
               pkg.isGold 
-              ? 'border-[#D4AF37] scale-105 relative z-10 shadow-[#D4AF37]/10' // اللون الذهبي
-              : 'border-vox-primary' // اللون الأحمر الملكي للباقات الجانبية بنفس السمك
+              ? 'border-[#D4AF37] scale-105 relative z-10 shadow-[#D4AF37]/10'
+              : 'border-vox-primary'
             }`}>
               
               {pkg.isGold && (
@@ -56,7 +56,7 @@ export function Packages() {
                 <span className={`text-4xl font-black ${pkg.isGold ? 'text-[#D4AF37]' : 'text-vox-primary'}`}>
                   {pkg.price}
                 </span>
-                <span className="text-stone-500 text-sm">دينار</span>
+                <span className="text-stone-500 text-sm">دينار جزائري</span>
               </div>
               
               <div className="h-px w-full bg-stone-100 mb-8"></div>
