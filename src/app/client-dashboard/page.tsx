@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Mic2, LogOut, Plus, Clock, CheckCircle,
-  PlayCircle, AlertCircle, FileText, X
+  PlayCircle, AlertCircle, FileText, X, Tag
 } from 'lucide-react';
 
 interface Order {
@@ -22,26 +22,14 @@ interface Order {
   createdAt: any;
 }
 
-const packagesDetails = [
-  {
-    name: 'باقة التعليق الصوتي',
-    price: '5000 د.ج',
-    desc: 'مثالية للمشاريع البسيطة',
-    features: ['تعليق صوتي احترافي', 'جودة تسجيل HD', 'تسليم خلال 3 أيام', 'مراجعة واحدة مجانية']
-  },
-  {
-    name: 'باقة التعليق والتدقيق',
-    price: '8000 د.ج',
-    desc: 'للمحتوى الاحترافي — الأكثر طلباً',
-    features: ['كل مميزات الباقة الأولى', 'تدقيق لغوي للنص', 'تصحيح الأخطاء النحوية', 'تحسين الصياغة']
-  },
-  {
-    name: 'باقة كاملة المحتوى',
-    price: '13000 د.ج',
-    desc: 'حل شامل ومتكامل',
-    features: ['كل مميزات الباقتين السابقتين', 'كتابة النص من الصفر', 'بحث وتطوير المحتوى', 'كتابة إبداعية']
-  },
-];
+interface PackageItem {
+  id: string;
+  name: string;
+  price: string;
+  desc: string;
+  features: string[];
+  popular: boolean;
+}
 
 export default function ClientDashboard() {
   const { logout } = useAuth();
@@ -50,6 +38,7 @@ export default function ClientDashboard() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [artists, setArtists] = useState<any[]>([]);
+  const [packages, setPackages] = useState<PackageItem[]>([]);
   const [userName, setUserName] = useState('');
   const [userId, setUserId] = useState('');
   const router = useRouter();
@@ -85,12 +74,20 @@ export default function ClientDashboard() {
 
     const fetchData = async () => {
       try {
+        // جلب الطلبات
         const ordersSnapshot = await getDocs(collection(db, 'orders'));
         const allOrders = ordersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Order[];
         setOrders(allOrders.filter((o: any) => o.clientId === id));
 
+        // جلب المعلقين
         const artistsSnapshot = await getDocs(collection(db, 'artists'));
         setArtists(artistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any })).filter(a => a.name));
+
+        // جلب الباقات من Firestore
+        const packagesSnapshot = await getDocs(collection(db, 'packages'));
+        const pkgs = packagesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PackageItem));
+        setPackages(pkgs);
+
       } catch (err) { console.error(err); }
       finally { setLoading(false); }
     };
@@ -135,25 +132,19 @@ export default function ClientDashboard() {
         artistId: 'admin',
         title: '📋 طلب عمل جديد',
         body: `${userName} طلب ${selectedPackage} — المعلق: ${selectedVoiceActor} — ${workType}`,
-        type: 'new_order',
-        read: false,
-        createdAt: serverTimestamp(),
+        type: 'new_order', read: false, createdAt: serverTimestamp(),
       });
 
       // إشعار للمعلق المختار
       if (selectedVoiceActor !== 'اختيار الأنسب من طرفكم') {
         try {
-          const artistsSnap = await getDocs(
-            query(collection(db, 'artists'), where('name', '==', selectedVoiceActor))
-          );
+          const artistsSnap = await getDocs(query(collection(db, 'artists'), where('name', '==', selectedVoiceActor)));
           if (!artistsSnap.empty) {
             await addDoc(collection(db, 'notifications'), {
               artistId: artistsSnap.docs[0].id,
               title: '🎯 طلب عمل جديد لصوتك!',
               body: `${userName} طلب ${workType} — الباقة: ${selectedPackage}`,
-              type: 'new_order',
-              read: false,
-              createdAt: serverTimestamp(),
+              type: 'new_order', read: false, createdAt: serverTimestamp(),
             });
           }
         } catch (_) {}
@@ -169,10 +160,7 @@ export default function ClientDashboard() {
     setSubmitting(false);
   };
 
-  const handleLogout = async () => {
-    await logout();
-    router.push('/login');
-  };
+  const handleLogout = async () => { await logout(); router.push('/login'); };
 
   if (!mounted || loading) {
     return (
@@ -189,7 +177,7 @@ export default function ClientDashboard() {
     review:      orders.filter(o => o.status === 'review').length,
   };
 
-  const selectedPkgDetails = packagesDetails.find(p => p.name === selectedPackage);
+  const selectedPkgDetails = packages.find(p => p.name === selectedPackage);
 
   return (
     <div className="min-h-screen bg-gray-50" dir="rtl">
@@ -204,8 +192,7 @@ export default function ClientDashboard() {
         <div className="flex items-center gap-4">
           <Link href="/" className="text-gray-400 hover:text-white font-bold text-sm transition">الواجهة الرئيسية</Link>
           <span className="text-gray-400 font-bold text-sm">مرحباً، {userName}</span>
-          <button onClick={handleLogout}
-            className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-full font-black text-sm hover:bg-red-700 transition">
+          <button onClick={handleLogout} className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-full font-black text-sm hover:bg-red-700 transition">
             <LogOut size={16} /> خروج
           </button>
         </div>
@@ -266,6 +253,7 @@ export default function ClientDashboard() {
         )}
       </div>
 
+      {/* نموذج الطلب */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -275,30 +263,50 @@ export default function ClientDashboard() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
+              {/* اختيار الباقة */}
               <div>
                 <label className="block text-sm font-black text-gray-700 mb-2">اختر الباقة *</label>
-                <select value={selectedPackage} onChange={e => setSelectedPackage(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400">
-                  <option value="">— اختر الباقة —</option>
-                  {packagesDetails.map(pkg => (
-                    <option key={pkg.name} value={pkg.name}>{pkg.name} — {pkg.price}</option>
-                  ))}
-                </select>
-                {selectedPkgDetails && (
-                  <div className="mt-3 bg-red-50 border border-red-100 rounded-2xl p-4">
-                    <p className="font-black text-red-700 text-sm mb-1">{selectedPkgDetails.name} — {selectedPkgDetails.price}</p>
-                    <p className="text-red-500 font-bold text-xs mb-2">{selectedPkgDetails.desc}</p>
-                    <ul className="space-y-1">
-                      {selectedPkgDetails.features.map((f, i) => (
-                        <li key={i} className="text-xs text-red-600 font-bold flex items-center gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />{f}
-                        </li>
-                      ))}
-                    </ul>
+                {packages.length === 0 ? (
+                  <div className="flex items-center gap-2 text-gray-400 font-bold text-sm bg-gray-50 px-4 py-3 rounded-xl border border-gray-200">
+                    <Tag size={16} />
+                    لا توجد باقات متاحة حالياً — تواصل مع الإدارة
                   </div>
+                ) : (
+                  <>
+                    <select value={selectedPackage} onChange={e => setSelectedPackage(e.target.value)}
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400">
+                      <option value="">— اختر الباقة —</option>
+                      {packages.map(pkg => (
+                        <option key={pkg.id} value={pkg.name}>
+                          {pkg.name} — {pkg.price} دج {pkg.popular ? '⭐' : ''}
+                        </option>
+                      ))}
+                    </select>
+
+                    {/* تفاصيل الباقة المختارة */}
+                    {selectedPkgDetails && (
+                      <div className="mt-3 bg-red-50 border border-red-100 rounded-2xl p-4">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="font-black text-red-700 text-sm">{selectedPkgDetails.name}</p>
+                          <span className="font-black text-red-600 text-sm">{selectedPkgDetails.price} دج</span>
+                        </div>
+                        {selectedPkgDetails.desc && <p className="text-red-500 font-bold text-xs mb-2">{selectedPkgDetails.desc}</p>}
+                        {selectedPkgDetails.features?.length > 0 && (
+                          <ul className="space-y-1">
+                            {selectedPkgDetails.features.map((f, i) => (
+                              <li key={i} className="text-xs text-red-600 font-bold flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />{f}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
+              {/* اختيار المعلق */}
               <div>
                 <label className="block text-sm font-black text-gray-700 mb-2">اختر المعلق الصوتي *</label>
                 <select value={selectedVoiceActor} onChange={e => setSelectedVoiceActor(e.target.value)}
@@ -313,6 +321,7 @@ export default function ClientDashboard() {
                 </select>
               </div>
 
+              {/* نوع العمل */}
               <div>
                 <label className="block text-sm font-black text-gray-700 mb-2">نوع العمل *</label>
                 <select value={workType} onChange={e => setWorkType(e.target.value)}
@@ -322,6 +331,7 @@ export default function ClientDashboard() {
                 </select>
               </div>
 
+              {/* التفاصيل */}
               <div>
                 <label className="block text-sm font-black text-gray-700 mb-2">تفاصيل المشروع *</label>
                 <textarea value={description} onChange={e => setDescription(e.target.value)}
@@ -330,6 +340,7 @@ export default function ClientDashboard() {
                   placeholder="اشرح مشروعك بالتفصيل..." />
               </div>
 
+              {/* ملف مرفق */}
               <div>
                 <label className="block text-sm font-black text-gray-700 mb-2">ملف مرفق (اختياري)</label>
                 <input type="file" onChange={e => setAttachedFile(e.target.files?.[0] || null)}
