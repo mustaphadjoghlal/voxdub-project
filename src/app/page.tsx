@@ -39,10 +39,20 @@ interface Partner {
   logo?: string;
 }
 
+interface PackageItem {
+  id: string;
+  name: string;
+  price: string;
+  desc: string;
+  features: string[];
+  popular: boolean;
+}
+
 export default function Home() {
   const { userRole, mounted, logout } = useAuth();
   const [artists, setArtists] = useState<Artist[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
+  const [packages, setPackages] = useState<PackageItem[]>([]);
   const [loadingArtists, setLoadingArtists] = useState(true);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
@@ -50,15 +60,8 @@ export default function Home() {
   const [loggedInArtistDocId, setLoggedInArtistDocId] = useState<string | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
-  const packages = [
-    { name: 'باقة التعليق الصوتي', price: '5000', popular: false, desc: 'مثالية للمشاريع البسيطة', features: ['تعليق صوتي احترافي', 'جودة تسجيل HD', 'تسليم خلال 3 أيام', 'مراجعة واحدة مجانية'] },
-    { name: 'باقة التعليق والتدقيق', price: '8000', popular: true, desc: 'للمحتوى الاحترافي', features: ['كل مميزات الباقة الأولى', 'تدقيق لغوي للنص', 'تصحيح الأخطاء النحوية', 'تحسين الصياغة'] },
-    { name: 'باقة كاملة المحتوى', price: '13000', popular: false, desc: 'حل شامل ومتكامل', features: ['كل مميزات الباقتين السابقتين', 'كتابة النص من الصفر', 'بحث وتطوير المحتوى', 'كتابة إبداعية'] },
-  ];
-
   const getAudioUrl = (artist: Artist): string | null => {
     if (!artist.audioSamples || artist.audioSamples.length === 0) return artist.audio || null;
-    // نأخذ أول عينة معتمدة فقط
     const approved = artist.audioSamples.find((s: any) =>
       typeof s === 'object' && 'url' in s && !s.pendingApproval
     );
@@ -68,23 +71,17 @@ export default function Home() {
     return artist.audio || null;
   };
 
-  // جلب المعلقين الذين عندهم عينة معتمدة
+  // جلب المعلقين
   useEffect(() => {
     const fetchArtists = async () => {
       try {
         const snapshot = await getDocs(collection(db, 'artists'));
         const data = snapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() } as Artist))
-          .filter(a =>
-            a.name &&
-            (a as any).audioSamples?.some((s: any) => !s.pendingApproval)
-          );
+          .filter(a => a.name && (a as any).audioSamples?.some((s: any) => !s.pendingApproval));
         setArtists(data);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoadingArtists(false);
-      }
+      } catch (err) { console.error(err); }
+      finally { setLoadingArtists(false); }
     };
     fetchArtists();
   }, []);
@@ -94,13 +91,21 @@ export default function Home() {
     const fetchPartners = async () => {
       try {
         const snapshot = await getDocs(collection(db, 'partners'));
-        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Partner));
-        setPartners(data);
-      } catch (err) {
-        console.error(err);
-      }
+        setPartners(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Partner)));
+      } catch (err) { console.error(err); }
     };
     fetchPartners();
+  }, []);
+
+  // جلب الباقات من Firestore
+  useEffect(() => {
+    const fetchPackages = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'packages'));
+        setPackages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PackageItem)));
+      } catch (err) { console.error(err); }
+    };
+    fetchPackages();
   }, []);
 
   useEffect(() => {
@@ -124,8 +129,7 @@ export default function Home() {
     const audioUrl = getAudioUrl(artist);
     if (!audioUrl) return;
     if (playingId === artist.id) {
-      currentAudio?.pause();
-      setPlayingId(null);
+      currentAudio?.pause(); setPlayingId(null);
     } else {
       if (currentAudio) currentAudio.pause();
       const newAudio = new Audio(audioUrl);
@@ -137,9 +141,7 @@ export default function Home() {
   };
 
   const handleLogout = () => {
-    logout();
-    setShowUserMenu(false);
-    setLoggedInArtist(null);
+    logout(); setShowUserMenu(false); setLoggedInArtist(null);
   };
 
   const isCurrentArtist = (artistId: string) => loggedInArtistDocId === artistId;
@@ -149,10 +151,7 @@ export default function Home() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
         * { font-family: 'Cairo', sans-serif; }
-        @keyframes marquee {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
+        @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
         .animate-marquee { animation: marquee 20s linear infinite; }
         .animate-marquee:hover { animation-play-state: paused; }
       `}</style>
@@ -183,7 +182,7 @@ export default function Home() {
                     <span className="text-gray-700 font-black hidden md:block">مرحباً، <span className="text-red-600">{loggedInArtist.name?.split(' ')[0]}</span> 👋</span>
                     <button className="relative w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition">
                       <Bell size={18} className="text-gray-600" />
-                      <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-600 rounded-full border-2 border-white"></span>
+                      <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-600 rounded-full border-2 border-white" />
                     </button>
                     <div className="relative">
                       <button onClick={() => setShowUserMenu(!showUserMenu)}
@@ -335,9 +334,7 @@ export default function Home() {
                 return (
                   <div key={artist.id} className={`rounded-3xl p-8 text-white hover:-translate-y-2 transition-transform duration-300 relative ${isMine ? 'bg-red-700 ring-4 ring-red-400' : 'bg-gray-900'}`}>
                     {isMine && (
-                      <div className="absolute -top-3 -right-3 bg-red-500 text-white text-xs font-black px-3 py-1 rounded-full border-2 border-white shadow-lg">
-                        ملفك الشخصي ✨
-                      </div>
+                      <div className="absolute -top-3 -right-3 bg-red-500 text-white text-xs font-black px-3 py-1 rounded-full border-2 border-white shadow-lg">ملفك الشخصي ✨</div>
                     )}
                     <div className="flex justify-between items-start mb-6">
                       <Award size={22} className={`${isMine ? 'text-yellow-300' : 'text-red-400'} opacity-60 flex-shrink-0`} />
@@ -354,11 +351,7 @@ export default function Home() {
                               {artist.name}
                             </h3>
                           </div>
-                          {hasAudio && (
-                            <p className="text-xs text-gray-500 mt-1 font-bold">
-                              {isPlaying ? '▶ جاري التشغيل...' : 'اضغط للاستماع'}
-                            </p>
-                          )}
+                          {hasAudio && <p className="text-xs text-gray-500 mt-1 font-bold">{isPlaying ? '▶ جاري التشغيل...' : 'اضغط للاستماع'}</p>}
                         </button>
                         <p className="text-gray-400 font-bold mt-2 text-sm">{artist.role || artist.style || ''}</p>
                         {artist.rating && (
@@ -371,11 +364,9 @@ export default function Home() {
                     </div>
                     <div className="flex items-center gap-4 bg-white/5 p-4 rounded-2xl mb-6 border border-white/10">
                       <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-700 flex-shrink-0">
-                        {(artist.profilePicture || artist.image) ? (
-                          <img src={artist.profilePicture || artist.image} alt={artist.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-2xl font-black text-gray-400">{artist.name?.[0] || '?'}</div>
-                        )}
+                        {(artist.profilePicture || artist.image)
+                          ? <img src={artist.profilePicture || artist.image} alt={artist.name} className="w-full h-full object-cover" />
+                          : <div className="w-full h-full flex items-center justify-center text-2xl font-black text-gray-400">{artist.name?.[0] || '?'}</div>}
                       </div>
                       <div className="text-sm font-bold text-gray-300 space-y-1 text-right">
                         {artist.experience && <p>الخبرة: <span className="text-white">{artist.experience}</span></p>}
@@ -442,15 +433,10 @@ export default function Home() {
           <div className="relative">
             <div className="flex animate-marquee gap-8 w-max">
               {[...partners, ...partners].map((partner, i) => (
-                <div key={i}
-                  className="flex-shrink-0 bg-white rounded-2xl px-8 py-6 shadow-sm border border-gray-100 flex flex-col items-center gap-3 min-w-[180px] hover:shadow-md hover:border-red-100 transition-all">
-                  {partner.logo ? (
-                    <img src={partner.logo} alt={partner.name} className="w-16 h-16 object-contain rounded-xl" />
-                  ) : (
-                    <div className="w-16 h-16 bg-red-50 rounded-xl flex items-center justify-center">
-                      <Building2 size={28} className="text-red-400" />
-                    </div>
-                  )}
+                <div key={i} className="flex-shrink-0 bg-white rounded-2xl px-8 py-6 shadow-sm border border-gray-100 flex flex-col items-center gap-3 min-w-[180px] hover:shadow-md hover:border-red-100 transition-all">
+                  {partner.logo
+                    ? <img src={partner.logo} alt={partner.name} className="w-16 h-16 object-contain rounded-xl" />
+                    : <div className="w-16 h-16 bg-red-50 rounded-xl flex items-center justify-center"><Building2 size={28} className="text-red-400" /></div>}
                   <p className="font-black text-gray-800 text-sm text-center">{partner.name}</p>
                 </div>
               ))}
@@ -459,36 +445,40 @@ export default function Home() {
         </section>
       )}
 
-      {/* Pricing */}
+      {/* Pricing — يُجلب من Firestore */}
       <section id="pricing" className="py-24 bg-white">
         <div className="max-w-6xl mx-auto px-6 text-center">
           <h2 className="text-4xl font-black text-gray-900 mb-16">باقاتنا</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-right">
-            {packages.map((plan, i) => (
-              <div key={i} className={`p-8 rounded-3xl border-2 bg-white transition-all ${plan.popular ? 'border-red-600 shadow-2xl scale-105 relative' : 'border-gray-100'}`}>
-                {plan.popular && (
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-1 rounded-full font-black text-sm">الأكثر طلباً</div>
-                )}
-                <h3 className="text-xl font-black text-gray-900 mb-1">{plan.name}</h3>
-                <p className="text-gray-400 font-bold text-sm mb-6">{plan.desc}</p>
-                <div className="mb-8">
-                  <span className="text-4xl font-black text-red-600">{plan.price}</span>
-                  <span className="text-gray-400 font-bold text-xs mr-2">دينار</span>
+          {packages.length === 0 ? (
+            <p className="text-gray-400 font-bold py-12">جاري تحميل الباقات...</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-right">
+              {packages.map((plan) => (
+                <div key={plan.id} className={`p-8 rounded-3xl border-2 bg-white transition-all relative ${plan.popular ? 'border-red-600 shadow-2xl scale-105' : 'border-gray-100'}`}>
+                  {plan.popular && (
+                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-1 rounded-full font-black text-sm">الأكثر طلباً</div>
+                  )}
+                  <h3 className="text-xl font-black text-gray-900 mb-1">{plan.name}</h3>
+                  <p className="text-gray-400 font-bold text-sm mb-6">{plan.desc}</p>
+                  <div className="mb-8">
+                    <span className="text-4xl font-black text-red-600">{plan.price}</span>
+                    <span className="text-gray-400 font-bold text-xs mr-2">دينار</span>
+                  </div>
+                  <ul className="space-y-3 mb-8">
+                    {plan.features?.map((f, j) => (
+                      <li key={j} className="flex items-center gap-2 text-sm font-bold text-gray-600">
+                        <CheckCircle2 size={16} className="text-red-600 flex-shrink-0" />{f}
+                      </li>
+                    ))}
+                  </ul>
+                  <Link href={mounted && userRole !== 'visitor' ? '/client-dashboard' : '/register'}
+                    className={`w-full py-3 rounded-2xl block text-center font-black transition-all ${plan.popular ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-gray-900 text-white hover:bg-gray-700'}`}>
+                    ابدأ الآن
+                  </Link>
                 </div>
-                <ul className="space-y-3 mb-8">
-                  {plan.features.map((f, j) => (
-                    <li key={j} className="flex items-center gap-2 text-sm font-bold text-gray-600">
-                      <CheckCircle2 size={16} className="text-red-600 flex-shrink-0" />{f}
-                    </li>
-                  ))}
-                </ul>
-                <Link href={mounted && userRole !== 'visitor' ? '/client-dashboard' : '/register'}
-                  className={`w-full py-3 rounded-2xl block text-center font-black transition-all ${plan.popular ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-gray-900 text-white hover:bg-gray-700'}`}>
-                  ابدأ الآن
-                </Link>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
