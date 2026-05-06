@@ -9,7 +9,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Mic2, LogOut, Plus, Clock, CheckCircle,
-  PlayCircle, AlertCircle, FileText, X, Tag
+  PlayCircle, AlertCircle, FileText, X, Tag,
+  Eye, Download, MessageSquare, Send
 } from 'lucide-react';
 
 interface Order {
@@ -18,6 +19,7 @@ interface Order {
   selectedVoiceActor: string;
   workType: string;
   description: string;
+  fileAttachmentURL?: string;
   status: 'pending' | 'accepted' | 'in_progress' | 'completed' | 'review';
   createdAt: any;
 }
@@ -43,6 +45,12 @@ export default function ClientDashboard() {
   const [userId, setUserId] = useState('');
   const router = useRouter();
 
+  // تفاصيل الطلب المفتوح
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [sendingFeedback, setSendingFeedback] = useState(false);
+  const [feedbackSent, setFeedbackSent] = useState(false);
+
   const [selectedPackage, setSelectedPackage] = useState('');
   const [selectedVoiceActor, setSelectedVoiceActor] = useState('');
   const [workType, setWorkType] = useState('');
@@ -53,7 +61,7 @@ export default function ClientDashboard() {
 
   const workTypes = ['إعلان تجاري', 'وثائقي', 'كتاب صوتي', 'رد آلي (IVR)', 'بودكاست', 'آخر'];
 
-  const statusConfig = {
+  const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
     pending:     { label: 'في انتظار الموافقة', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
     accepted:    { label: 'تم القبول',           color: 'bg-blue-100 text-blue-700',    icon: CheckCircle },
     in_progress: { label: 'جاري التنفيذ',        color: 'bg-purple-100 text-purple-700', icon: PlayCircle },
@@ -74,20 +82,13 @@ export default function ClientDashboard() {
 
     const fetchData = async () => {
       try {
-        // جلب الطلبات
         const ordersSnapshot = await getDocs(collection(db, 'orders'));
         const allOrders = ordersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Order[];
         setOrders(allOrders.filter((o: any) => o.clientId === id));
-
-        // جلب المعلقين
         const artistsSnapshot = await getDocs(collection(db, 'artists'));
         setArtists(artistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any })).filter(a => a.name));
-
-        // جلب الباقات من Firestore
         const packagesSnapshot = await getDocs(collection(db, 'packages'));
-        const pkgs = packagesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PackageItem));
-        setPackages(pkgs);
-
+        setPackages(packagesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PackageItem)));
       } catch (err) { console.error(err); }
       finally { setLoading(false); }
     };
@@ -99,10 +100,7 @@ export default function ClientDashboard() {
     if (!selectedPackage) { setFormError('يرجى اختيار الباقة'); return; }
     if (!selectedVoiceActor) { setFormError('يرجى اختيار المعلق'); return; }
     if (!workType) { setFormError('يرجى اختيار نوع العمل'); return; }
-
-    setSubmitting(true);
-    setFormError('');
-
+    setSubmitting(true); setFormError('');
     try {
       let fileURL = null;
       if (attachedFile) {
@@ -111,31 +109,19 @@ export default function ClientDashboard() {
         const snapshot = await uploadBytes(storageRef, attachedFile);
         fileURL = await getDownloadURL(snapshot.ref);
       }
-
       const newOrder = {
-        clientId: userId,
-        clientName: userName,
-        selectedPackage,
-        selectedVoiceActor,
-        workType,
-        description,
-        fileAttachmentURL: fileURL,
-        status: 'pending',
-        createdAt: serverTimestamp()
+        clientId: userId, clientName: userName,
+        selectedPackage, selectedVoiceActor, workType, description,
+        fileAttachmentURL: fileURL, status: 'pending', createdAt: serverTimestamp()
       };
-
       const docRef = await addDoc(collection(db, 'orders'), newOrder);
       setOrders(prev => [...prev, { id: docRef.id, ...newOrder } as any]);
-
-      // إشعار للمديرة
       await addDoc(collection(db, 'notifications'), {
         artistId: 'admin',
         title: '📋 طلب عمل جديد',
         body: `${userName} طلب ${selectedPackage} — المعلق: ${selectedVoiceActor} — ${workType}`,
         type: 'new_order', read: false, createdAt: serverTimestamp(),
       });
-
-      // إشعار للمعلق المختار
       if (selectedVoiceActor !== 'اختيار الأنسب من طرفكم') {
         try {
           const artistsSnap = await getDocs(query(collection(db, 'artists'), where('name', '==', selectedVoiceActor)));
@@ -149,15 +135,34 @@ export default function ClientDashboard() {
           }
         } catch (_) {}
       }
-
       setSelectedPackage(''); setSelectedVoiceActor('');
       setWorkType(''); setDescription('');
       setAttachedFile(null); setShowForm(false);
-    } catch (err) {
-      console.error(err);
-      setFormError('حدث خطأ أثناء الإرسال.');
-    }
+    } catch (err) { console.error(err); setFormError('حدث خطأ أثناء الإرسال.'); }
     setSubmitting(false);
+  };
+
+  // إرسال ملاحظات للمديرة
+  const handleSendFeedback = async () => {
+    if (!feedbackText.trim() || !selectedOrder) return;
+    setSendingFeedback(true);
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        artistId: 'admin',
+        title: '💬 ملاحظات من عميل على طلب',
+        body: `${userName} — طلب "${selectedOrder.selectedPackage}" — المعلق: ${selectedOrder.selectedVoiceActor}\n\nالملاحظات: ${feedbackText}`,
+        type: 'client_feedback',
+        orderId: selectedOrder.id,
+        clientName: userName,
+        voiceActor: selectedOrder.selectedVoiceActor,
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+      setFeedbackSent(true);
+      setFeedbackText('');
+      setTimeout(() => setFeedbackSent(false), 3000);
+    } catch (err) { alert('حدث خطأ.'); }
+    setSendingFeedback(false);
   };
 
   const handleLogout = async () => { await logout(); router.push('/login'); };
@@ -236,16 +241,25 @@ export default function ClientDashboard() {
               const status = statusConfig[order.status] || statusConfig.pending;
               const StatusIcon = status.icon;
               return (
-                <div key={order.id} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="font-black text-gray-900">{order.selectedPackage}</h3>
-                    <span className={`px-3 py-1 rounded-full text-xs font-black flex items-center gap-1 ${status.color}`}>
-                      <StatusIcon size={12} />{status.label}
-                    </span>
+                <div key={order.id} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="font-black text-gray-900">{order.selectedPackage}</h3>
+                        <span className={`px-3 py-1 rounded-full text-xs font-black flex items-center gap-1 ${status.color}`}>
+                          <StatusIcon size={12} />{status.label}
+                        </span>
+                      </div>
+                      <p className="text-gray-500 font-bold text-sm mb-1">المعلق: <span className="text-gray-700">{order.selectedVoiceActor}</span></p>
+                      <p className="text-gray-500 font-bold text-sm mb-1">نوع العمل: <span className="text-gray-700">{order.workType}</span></p>
+                      {order.description && <p className="text-gray-400 font-bold text-xs mt-2 line-clamp-2">{order.description}</p>}
+                    </div>
+                    <button
+                      onClick={() => { setSelectedOrder(order); setFeedbackSent(false); }}
+                      className="flex items-center gap-2 bg-gray-100 text-gray-700 px-4 py-2 rounded-full font-black text-xs hover:bg-red-600 hover:text-white transition flex-shrink-0">
+                      <Eye size={14} /> التفاصيل
+                    </button>
                   </div>
-                  <p className="text-gray-500 font-bold text-sm mb-1">المعلق: <span className="text-gray-700">{order.selectedVoiceActor}</span></p>
-                  <p className="text-gray-500 font-bold text-sm mb-1">نوع العمل: <span className="text-gray-700">{order.workType}</span></p>
-                  {order.description && <p className="text-gray-400 font-bold text-xs mt-2 line-clamp-2">{order.description}</p>}
                 </div>
               );
             })}
@@ -253,7 +267,96 @@ export default function ClientDashboard() {
         )}
       </div>
 
-      {/* نموذج الطلب */}
+      {/* modal تفاصيل الطلب + ملاحظات */}
+      {selectedOrder && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center px-8 py-6 border-b border-gray-100">
+              <h2 className="text-xl font-black text-gray-900">تفاصيل الطلب</h2>
+              <button onClick={() => setSelectedOrder(null)} className="text-gray-400 hover:text-gray-600"><X size={22} /></button>
+            </div>
+
+            <div className="px-8 py-6 space-y-5">
+              {/* معلومات الطلب */}
+              <div className="bg-gray-50 rounded-2xl p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-black text-gray-900">{selectedOrder.selectedPackage}</span>
+                  <span className={`px-3 py-1 rounded-full text-xs font-black ${statusConfig[selectedOrder.status]?.color}`}>
+                    {statusConfig[selectedOrder.status]?.label}
+                  </span>
+                </div>
+                <p className="text-gray-500 font-bold text-sm">المعلق: <span className="text-gray-800">{selectedOrder.selectedVoiceActor}</span></p>
+                <p className="text-gray-500 font-bold text-sm">نوع العمل: <span className="text-gray-800">{selectedOrder.workType}</span></p>
+              </div>
+
+              {/* النص الكامل */}
+              {selectedOrder.description && (
+                <div>
+                  <h3 className="font-black text-gray-900 mb-2 flex items-center gap-2">
+                    <FileText size={16} className="text-red-600" /> النص / تفاصيل المشروع
+                  </h3>
+                  <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
+                    <p className="text-gray-700 font-bold text-sm leading-relaxed whitespace-pre-wrap">{selectedOrder.description}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* الملف المرفق */}
+              {selectedOrder.fileAttachmentURL && (
+                <div>
+                  <h3 className="font-black text-gray-900 mb-2 flex items-center gap-2">
+                    <Download size={16} className="text-red-600" /> الملف المرفق
+                  </h3>
+                  <a href={selectedOrder.fileAttachmentURL} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-3 bg-emerald-50 border border-emerald-100 rounded-2xl p-4 hover:bg-emerald-100 transition">
+                    <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <Download size={18} className="text-white" />
+                    </div>
+                    <div>
+                      <p className="font-black text-emerald-800 text-sm">تحميل الملف المرفق</p>
+                      <p className="text-emerald-600 font-bold text-xs">اضغط للفتح أو التحميل</p>
+                    </div>
+                  </a>
+                </div>
+              )}
+
+              {/* إرسال ملاحظات للمديرة */}
+              <div>
+                <h3 className="font-black text-gray-900 mb-2 flex items-center gap-2">
+                  <MessageSquare size={16} className="text-red-600" /> إرسال ملاحظات للإدارة
+                </h3>
+                <p className="text-gray-400 font-bold text-xs mb-3">
+                  ستصل ملاحظاتك للمديرة التي ستتولى إيصالها للمعلق الصوتي
+                </p>
+                {feedbackSent ? (
+                  <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 text-center">
+                    <p className="text-emerald-700 font-black">✅ تم إرسال ملاحظاتك بنجاح!</p>
+                    <p className="text-emerald-600 font-bold text-xs mt-1">ستتواصل معك الإدارة قريباً</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <textarea
+                      value={feedbackText}
+                      onChange={e => setFeedbackText(e.target.value)}
+                      rows={4}
+                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 outline-none font-bold text-sm resize-none focus:border-red-400 transition"
+                      placeholder="اكتب ملاحظاتك هنا... مثلاً: أريد تغيير النبرة، أو تعديل في الفقرة الثانية..." />
+                    <button
+                      onClick={handleSendFeedback}
+                      disabled={sendingFeedback || !feedbackText.trim()}
+                      className="w-full bg-red-600 text-white py-3 rounded-2xl font-black hover:bg-red-700 disabled:bg-gray-200 disabled:text-gray-400 transition flex items-center justify-center gap-2">
+                      <Send size={16} />
+                      {sendingFeedback ? 'جاري الإرسال...' : 'إرسال الملاحظات للإدارة'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* نموذج الطلب الجديد */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -263,13 +366,11 @@ export default function ClientDashboard() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              {/* اختيار الباقة */}
               <div>
                 <label className="block text-sm font-black text-gray-700 mb-2">اختر الباقة *</label>
                 {packages.length === 0 ? (
                   <div className="flex items-center gap-2 text-gray-400 font-bold text-sm bg-gray-50 px-4 py-3 rounded-xl border border-gray-200">
-                    <Tag size={16} />
-                    لا توجد باقات متاحة حالياً — تواصل مع الإدارة
+                    <Tag size={16} /> لا توجد باقات متاحة حالياً — تواصل مع الإدارة
                   </div>
                 ) : (
                   <>
@@ -277,13 +378,9 @@ export default function ClientDashboard() {
                       className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400">
                       <option value="">— اختر الباقة —</option>
                       {packages.map(pkg => (
-                        <option key={pkg.id} value={pkg.name}>
-                          {pkg.name} — {pkg.price} دج {pkg.popular ? '⭐' : ''}
-                        </option>
+                        <option key={pkg.id} value={pkg.name}>{pkg.name} — {pkg.price} دج {pkg.popular ? '⭐' : ''}</option>
                       ))}
                     </select>
-
-                    {/* تفاصيل الباقة المختارة */}
                     {selectedPkgDetails && (
                       <div className="mt-3 bg-red-50 border border-red-100 rounded-2xl p-4">
                         <div className="flex items-center justify-between mb-1">
@@ -306,22 +403,18 @@ export default function ClientDashboard() {
                 )}
               </div>
 
-              {/* اختيار المعلق */}
               <div>
                 <label className="block text-sm font-black text-gray-700 mb-2">اختر المعلق الصوتي *</label>
                 <select value={selectedVoiceActor} onChange={e => setSelectedVoiceActor(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400">
                   <option value="">— اختر المعلق —</option>
                   {artists.map(a => (
-                    <option key={a.id} value={a.name}>
-                      {a.name}{a.voiceType ? ` — ${a.voiceType}` : ''}{a.gender ? ` — ${a.gender}` : ''}
-                    </option>
+                    <option key={a.id} value={a.name}>{a.name}{a.voiceType ? ` — ${a.voiceType}` : ''}{a.gender ? ` — ${a.gender}` : ''}</option>
                   ))}
                   <option value="اختيار الأنسب من طرفكم">اختيار الأنسب من طرفكم</option>
                 </select>
               </div>
 
-              {/* نوع العمل */}
               <div>
                 <label className="block text-sm font-black text-gray-700 mb-2">نوع العمل *</label>
                 <select value={workType} onChange={e => setWorkType(e.target.value)}
@@ -331,26 +424,27 @@ export default function ClientDashboard() {
                 </select>
               </div>
 
-              {/* التفاصيل */}
               <div>
-                <label className="block text-sm font-black text-gray-700 mb-2">تفاصيل المشروع *</label>
+                <label className="block text-sm font-black text-gray-700 mb-2">النص الكامل وتفاصيل المشروع *</label>
                 <textarea value={description} onChange={e => setDescription(e.target.value)}
-                  required rows={4}
+                  required rows={5}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm resize-none focus:border-red-400"
-                  placeholder="اشرح مشروعك بالتفصيل..." />
+                  placeholder="اكتب النص المراد تسجيله وأي تفاصيل أخرى (النبرة المطلوبة، السرعة، الجمهور المستهدف...)" />
               </div>
 
-              {/* ملف مرفق */}
               <div>
                 <label className="block text-sm font-black text-gray-700 mb-2">ملف مرفق (اختياري)</label>
-                <input type="file" onChange={e => setAttachedFile(e.target.files?.[0] || null)}
-                  className="w-full text-sm text-gray-500 font-bold cursor-pointer" />
+                <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center hover:border-red-400 transition">
+                  <input type="file" id="attachFile" onChange={e => setAttachedFile(e.target.files?.[0] || null)} className="hidden" />
+                  <label htmlFor="attachFile" className="cursor-pointer">
+                    <FileText size={24} className="text-gray-300 mx-auto mb-2" />
+                    <p className="text-gray-400 font-bold text-sm">{attachedFile ? attachedFile.name : 'اضغط لرفع ملف (PDF، Word، صوت...)'}</p>
+                  </label>
+                </div>
               </div>
 
               {formError && (
-                <div className="bg-red-50 border border-red-100 text-red-600 text-sm font-bold text-center py-3 px-4 rounded-xl">
-                  {formError}
-                </div>
+                <div className="bg-red-50 border border-red-100 text-red-600 text-sm font-bold text-center py-3 px-4 rounded-xl">{formError}</div>
               )}
 
               <button type="submit" disabled={submitting}
