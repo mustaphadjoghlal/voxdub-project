@@ -10,6 +10,10 @@ import {
   Search, MessageSquare, Headphones, FileCheck,
   CheckCircle2, Bell, User, LogOut, LayoutDashboard, Building2
 } from 'lucide-react';
+import ServicesSection from './components/ServicesSection';
+import LanguageToggle from './components/LanguageToggle';
+import { useLang } from './context/LanguageContext';
+import { useSettings } from './context/SettingsContext';
 
 interface AudioSample {
   name: string;
@@ -50,6 +54,8 @@ interface PackageItem {
 
 export default function Home() {
   const { userRole, mounted, logout } = useAuth();
+  const { settings } = useSettings();
+  const { t, lang } = useLang();
   const [artists, setArtists] = useState<Artist[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [packages, setPackages] = useState<PackageItem[]>([]);
@@ -160,13 +166,24 @@ export default function Home() {
       <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-gray-100 h-20 flex items-center">
         <div className="max-w-7xl mx-auto px-6 w-full flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <div className="bg-red-600 p-2 rounded-xl"><Mic2 className="text-white w-5 h-5" /></div>
-            <span className="text-2xl font-black">Vox<span className="text-red-600">Dub</span></span>
+            {settings.logoUrl ? (
+              <img src={settings.logoUrl} alt="VoxDub" className="h-10 w-auto object-contain" />
+            ) : (
+              <>
+                <div className="p-2 rounded-xl" style={{ backgroundColor: settings.primaryColor || '#dc2626' }}>
+                  <Mic2 className="text-white w-5 h-5" />
+                </div>
+                <span className="text-2xl font-black">Vox<span style={{ color: settings.primaryColor || '#dc2626' }}>Dub</span></span>
+              </>
+            )}
           </div>
           <div className="flex items-center gap-3">
+            <a href="#services" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">{t('nav.services')}</a>
+            <a href="/about" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">{t('nav.about')}</a>
             <a href="#artists" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">المعلقون</a>
             <a href="#partners" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">شركاؤنا</a>
             <a href="#pricing" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">الباقات</a>
+            <LanguageToggle />
             {!mounted ? (
               <div className="w-32 h-10 bg-gray-100 rounded-full animate-pulse" />
             ) : (
@@ -420,6 +437,7 @@ export default function Home() {
         </div>
       </section>
 
+      <ServicesSection />
       {/* شركاؤنا */}
       {partners.length > 0 && (
         <section id="partners" className="py-20 bg-gray-50 overflow-hidden">
@@ -453,10 +471,14 @@ export default function Home() {
             <p className="text-gray-400 font-bold py-12">جاري تحميل الباقات...</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-right">
-              {packages.map((plan) => (
+              {((): typeof packages => {
+                const popular = packages.find(p => p.popular);
+                const others = packages.filter(p => !p.popular);
+                return popular && others.length >= 2 ? [others[0], popular, ...others.slice(1)] : packages;
+              })().map((plan) => (
                 <div key={plan.id} className={`p-8 rounded-3xl border-2 bg-white transition-all relative ${plan.popular ? 'border-red-600 shadow-2xl scale-105' : 'border-gray-100'}`}>
                   {plan.popular && (
-                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-1 rounded-full font-black text-sm">الأكثر طلباً</div>
+                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-1 rounded-full font-black text-sm">{t('pricing.popular')}</div>
                   )}
                   <h3 className="text-xl font-black text-gray-900 mb-1">{plan.name}</h3>
                   <p className="text-gray-400 font-bold text-sm mb-6">{plan.desc}</p>
@@ -510,6 +532,7 @@ export default function Home() {
         <div className="flex justify-center gap-8 mt-8">
           <a href="#artists" className="text-gray-400 hover:text-white font-bold text-sm transition">المعلقون</a>
           <a href="#partners" className="text-gray-400 hover:text-white font-bold text-sm transition">شركاؤنا</a>
+          <a href="/about" className="text-gray-400 hover:text-white font-bold text-sm transition">{t('nav.about')}</a>
           {mounted && userRole !== 'visitor' ? (
             <Link href={userRole === 'client' ? '/client-dashboard' : '/dashboard'}
               className="text-gray-400 hover:text-white font-bold text-sm transition">لوحة التحكم</Link>
