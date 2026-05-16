@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --primary-color: #dc2626;
+}
+
 * {
   margin: 0;
   padding: 0;
