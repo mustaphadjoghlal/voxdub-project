@@ -18,8 +18,8 @@ export interface SiteSettings {
 const defaultSettings: SiteSettings = {
   primaryColor: '#dc2626',
   logoUrl: '',
-  aboutUsAr: 'VoxDub هي منصة احترافية تجمع بين أفضل المعلقين الصوتيين في العالم العربي والعملاء الباحثين عن جودة صوتية عالية. نحن نؤمن بأن الصوت هو روح المحتوى، ونسعى دائماً لتقديم أفضل التجارب الصوتية.',
-  aboutUsEn: 'VoxDub is a professional platform connecting the best voice-over artists in the Arab world with clients seeking high-quality audio. We believe that voice is the soul of content, and we always strive to deliver the best audio experiences.',
+  aboutUsAr: 'VoxDub هي منصة احترافية تجمع بين أفضل المعلقين الصوتيين في العالم العربي والعملاء الباحثين عن جودة صوتية عالية.',
+  aboutUsEn: 'VoxDub is a professional platform connecting the best voice-over artists in the Arab world with clients seeking high-quality audio.',
   heroTitleAr: 'منصة المعلقين الصوتيين الاحترافية',
   heroTitleEn: 'Professional Voice-Over Platform',
   heroSubtitleAr: 'اكتشف أفضل المعلقين الصوتيين في العالم العربي',
