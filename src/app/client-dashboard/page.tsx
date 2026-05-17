@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, serverTimestamp, query, where } from 'firebase/firestore';
+import { collection, getDocs, addDoc, serverTimestamp, query, where, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db, app } from '../components/firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useAuth } from '../context/AuthContext';
@@ -10,7 +10,7 @@ import Link from 'next/link';
 import {
   Mic2, LogOut, Plus, Clock, CheckCircle,
   PlayCircle, AlertCircle, FileText, X, Tag,
-  Eye, Download, MessageSquare, Send
+  Eye, Download, MessageSquare, Send, Bell
 } from 'lucide-react';
 
 interface Order {
@@ -24,13 +24,16 @@ interface Order {
   createdAt: any;
 }
 
-interface PackageItem {
+interface Notif {
   id: string;
-  name: string;
-  price: string;
-  desc: string;
-  features: string[];
-  popular: boolean;
+  title: string;
+  body: string;
+  read: boolean;
+  createdAt: any;
+}
+
+interface PackageItem {
+  id: string; name: string; price: string; desc: string; features: string[]; popular: boolean;
 }
 
 export default function ClientDashboard() {
@@ -43,9 +46,12 @@ export default function ClientDashboard() {
   const [packages, setPackages] = useState<PackageItem[]>([]);
   const [userName, setUserName] = useState('');
   const [userId, setUserId] = useState('');
+  const [userEmail, setUserEmail] = useState('');
   const router = useRouter();
 
-  // تفاصيل الطلب المفتوح
+  const [notifications, setNotifications] = useState<Notif[]>([]);
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
+
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [feedbackText, setFeedbackText] = useState('');
   const [sendingFeedback, setSendingFeedback] = useState(false);
@@ -58,6 +64,7 @@ export default function ClientDashboard() {
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
+  const [storageWarning, setStorageWarning] = useState('');
 
   const workTypes = ['إعلان تجاري', 'وثائقي', 'كتاب صوتي', 'رد آلي (IVR)', 'بودكاست', 'آخر'];
 
@@ -80,35 +87,71 @@ export default function ClientDashboard() {
     setUserId(id);
     setUserName(name || 'صاحب عمل');
 
-    const fetchData = async () => {
+    const fetchAll = async () => {
       try {
-        const ordersSnapshot = await getDocs(collection(db, 'orders'));
-        const allOrders = ordersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Order[];
-        setOrders(allOrders.filter((o: any) => o.clientId === id));
-        const artistsSnapshot = await getDocs(collection(db, 'artists'));
-        setArtists(artistsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any })).filter(a => a.name));
-        const packagesSnapshot = await getDocs(collection(db, 'packages'));
-        setPackages(packagesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PackageItem)));
+        // Get client email from Firestore
+        let email = '';
+        try {
+          const clientSnap = await getDoc(doc(db, 'clients', id));
+          if (clientSnap.exists()) email = clientSnap.data().email || '';
+        } catch {}
+        setUserEmail(email);
+
+        // Fetch orders by clientId OR email
+        const ordersSnap = await getDocs(collection(db, 'orders'));
+        const all = ordersSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+        setOrders(all.filter(o => o.clientId === id || (email && o.email === email)));
+
+        // Fetch status-change notifications for this client
+        if (email) {
+          const notifQ = query(
+            collection(db, 'notifications'),
+            where('clientEmail', '==', email),
+            where('type', '==', 'order_status_update')
+          );
+          const notifSnap = await getDocs(notifQ);
+          setNotifications(notifSnap.docs.map(d => ({ id: d.id, ...d.data() } as Notif)));
+        }
+
+        const artistsSnap = await getDocs(collection(db, 'artists'));
+        setArtists(artistsSnap.docs.map(d => ({ id: d.id, ...d.data() as any })).filter(a => a.name));
+        const pkgSnap = await getDocs(collection(db, 'packages'));
+        setPackages(pkgSnap.docs.map(d => ({ id: d.id, ...d.data() } as PackageItem)));
       } catch (err) { console.error(err); }
       finally { setLoading(false); }
     };
-    fetchData();
+    fetchAll();
   }, [mounted, router]);
+
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  const markAllRead = async () => {
+    const unread = notifications.filter(n => !n.read);
+    await Promise.all(unread.map(n => updateDoc(doc(db, 'notifications', n.id), { read: true }).catch(() => {})));
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPackage) { setFormError('يرجى اختيار الباقة'); return; }
     if (!selectedVoiceActor) { setFormError('يرجى اختيار المعلق'); return; }
     if (!workType) { setFormError('يرجى اختيار نوع العمل'); return; }
-    setSubmitting(true); setFormError('');
-    try {
-      let fileURL = null;
-      if (attachedFile) {
+    setSubmitting(true); setFormError(''); setStorageWarning('');
+
+    let fileURL: string | null = null;
+    if (attachedFile) {
+      try {
         const storage = getStorage(app);
         const storageRef = ref(storage, `orders/${Date.now()}_${attachedFile.name}`);
         const snapshot = await uploadBytes(storageRef, attachedFile);
         fileURL = await getDownloadURL(snapshot.ref);
+      } catch (uploadErr) {
+        console.warn('Storage upload failed:', uploadErr);
+        setStorageWarning('تعذّر رفع الملف، سيتم إرسال الطلب بدونه.');
       }
+    }
+
+    try {
       const newOrder = {
         clientId: userId, clientName: userName,
         selectedPackage, selectedVoiceActor, workType, description,
@@ -123,45 +166,39 @@ export default function ClientDashboard() {
         type: 'new_order', read: false, createdAt: serverTimestamp(),
       });
       if (selectedVoiceActor !== 'اختيار الأنسب من طرفكم') {
-        try {
-          const artistsSnap = await getDocs(query(collection(db, 'artists'), where('name', '==', selectedVoiceActor)));
-          if (!artistsSnap.empty) {
-            await addDoc(collection(db, 'notifications'), {
-              artistId: artistsSnap.docs[0].id,
-              title: '🎯 طلب عمل جديد لصوتك!',
-              body: `${userName} طلب ${workType} — الباقة: ${selectedPackage}`,
-              type: 'new_order', read: false, createdAt: serverTimestamp(),
-            });
-          }
-        } catch (_) {}
+        const artistQ = query(collection(db, 'artists'), where('name', '==', selectedVoiceActor));
+        const artistSnap = await getDocs(artistQ).catch(() => null);
+        if (artistSnap && !artistSnap.empty) {
+          await addDoc(collection(db, 'notifications'), {
+            artistId: artistSnap.docs[0].id,
+            title: '🎯 طلب عمل جديد لصوتك!',
+            body: `${userName} طلب ${workType} — الباقة: ${selectedPackage}`,
+            type: 'new_order', read: false, createdAt: serverTimestamp(),
+          });
+        }
       }
       setSelectedPackage(''); setSelectedVoiceActor('');
-      setWorkType(''); setDescription('');
-      setAttachedFile(null); setShowForm(false);
-    } catch (err) { console.error(err); setFormError('حدث خطأ أثناء الإرسال.'); }
+      setWorkType(''); setDescription(''); setAttachedFile(null); setShowForm(false);
+    } catch (err) {
+      console.error(err); setFormError('حدث خطأ أثناء الإرسال.');
+    }
     setSubmitting(false);
   };
 
-  // إرسال ملاحظات للمديرة
   const handleSendFeedback = async () => {
     if (!feedbackText.trim() || !selectedOrder) return;
     setSendingFeedback(true);
     try {
       await addDoc(collection(db, 'notifications'), {
         artistId: 'admin',
-        title: '💬 ملاحظات من عميل على طلب',
+        title: '💬 ملاحظات من عميل',
         body: `${userName} — طلب "${selectedOrder.selectedPackage}" — المعلق: ${selectedOrder.selectedVoiceActor}\n\nالملاحظات: ${feedbackText}`,
-        type: 'client_feedback',
-        orderId: selectedOrder.id,
-        clientName: userName,
-        voiceActor: selectedOrder.selectedVoiceActor,
-        read: false,
-        createdAt: serverTimestamp(),
+        type: 'client_feedback', orderId: selectedOrder.id,
+        clientName: userName, read: false, createdAt: serverTimestamp(),
       });
-      setFeedbackSent(true);
-      setFeedbackText('');
+      setFeedbackSent(true); setFeedbackText('');
       setTimeout(() => setFeedbackSent(false), 3000);
-    } catch (err) { alert('حدث خطأ.'); }
+    } catch { alert('حدث خطأ.'); }
     setSendingFeedback(false);
   };
 
@@ -197,11 +234,50 @@ export default function ClientDashboard() {
         <div className="flex items-center gap-4">
           <Link href="/" className="text-gray-400 hover:text-white font-bold text-sm transition">الواجهة الرئيسية</Link>
           <span className="text-gray-400 font-bold text-sm">مرحباً، {userName}</span>
+
+          {/* Notification Bell */}
+          <div className="relative">
+            <button
+              onClick={() => { setShowNotifPanel(v => !v); if (!showNotifPanel && unreadCount > 0) markAllRead(); }}
+              className="relative p-2 text-gray-400 hover:text-white transition">
+              <Bell size={20} />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 text-white text-xs font-black rounded-full flex items-center justify-center">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+            {showNotifPanel && (
+              <div className="absolute left-0 top-12 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden">
+                <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center">
+                  <h3 className="font-black text-gray-900 text-sm">تحديثات طلباتك</h3>
+                  <button onClick={() => setShowNotifPanel(false)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+                </div>
+                {notifications.length === 0 ? (
+                  <div className="px-5 py-8 text-center">
+                    <Bell size={28} className="text-gray-200 mx-auto mb-2" />
+                    <p className="text-gray-400 font-bold text-sm">لا توجد تحديثات</p>
+                  </div>
+                ) : (
+                  <div className="max-h-72 overflow-y-auto divide-y divide-gray-50">
+                    {[...notifications].reverse().map(n => (
+                      <div key={n.id} className={`px-5 py-4 ${n.read ? '' : 'bg-red-50'}`}>
+                        <p className="font-black text-gray-900 text-sm">{n.title}</p>
+                        <p className="text-gray-500 font-bold text-xs mt-1 leading-relaxed">{n.body}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <button onClick={handleLogout} className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-full font-black text-sm hover:bg-red-700 transition">
             <LogOut size={16} /> خروج
           </button>
         </div>
       </header>
+      {showNotifPanel && <div className="fixed inset-0 z-30" onClick={() => setShowNotifPanel(false)} />}
 
       <div className="max-w-6xl mx-auto px-6 py-10">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
@@ -267,7 +343,7 @@ export default function ClientDashboard() {
         )}
       </div>
 
-      {/* modal تفاصيل الطلب + ملاحظات */}
+      {/* Order Detail Modal */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-xl w-full max-h-[90vh] overflow-y-auto">
@@ -275,9 +351,7 @@ export default function ClientDashboard() {
               <h2 className="text-xl font-black text-gray-900">تفاصيل الطلب</h2>
               <button onClick={() => setSelectedOrder(null)} className="text-gray-400 hover:text-gray-600"><X size={22} /></button>
             </div>
-
             <div className="px-8 py-6 space-y-5">
-              {/* معلومات الطلب */}
               <div className="bg-gray-50 rounded-2xl p-5 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="font-black text-gray-900">{selectedOrder.selectedPackage}</span>
@@ -288,25 +362,17 @@ export default function ClientDashboard() {
                 <p className="text-gray-500 font-bold text-sm">المعلق: <span className="text-gray-800">{selectedOrder.selectedVoiceActor}</span></p>
                 <p className="text-gray-500 font-bold text-sm">نوع العمل: <span className="text-gray-800">{selectedOrder.workType}</span></p>
               </div>
-
-              {/* النص الكامل */}
               {selectedOrder.description && (
                 <div>
-                  <h3 className="font-black text-gray-900 mb-2 flex items-center gap-2">
-                    <FileText size={16} className="text-red-600" /> النص / تفاصيل المشروع
-                  </h3>
+                  <h3 className="font-black text-gray-900 mb-2 flex items-center gap-2"><FileText size={16} className="text-red-600" /> النص / تفاصيل المشروع</h3>
                   <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
                     <p className="text-gray-700 font-bold text-sm leading-relaxed whitespace-pre-wrap">{selectedOrder.description}</p>
                   </div>
                 </div>
               )}
-
-              {/* الملف المرفق */}
               {selectedOrder.fileAttachmentURL && (
                 <div>
-                  <h3 className="font-black text-gray-900 mb-2 flex items-center gap-2">
-                    <Download size={16} className="text-red-600" /> الملف المرفق
-                  </h3>
+                  <h3 className="font-black text-gray-900 mb-2 flex items-center gap-2"><Download size={16} className="text-red-600" /> الملف المرفق</h3>
                   <a href={selectedOrder.fileAttachmentURL} target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-3 bg-emerald-50 border border-emerald-100 rounded-2xl p-4 hover:bg-emerald-100 transition">
                     <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center flex-shrink-0">
@@ -319,34 +385,21 @@ export default function ClientDashboard() {
                   </a>
                 </div>
               )}
-
-              {/* إرسال ملاحظات للمديرة */}
               <div>
-                <h3 className="font-black text-gray-900 mb-2 flex items-center gap-2">
-                  <MessageSquare size={16} className="text-red-600" /> إرسال ملاحظات للإدارة
-                </h3>
-                <p className="text-gray-400 font-bold text-xs mb-3">
-                  ستصل ملاحظاتك للمديرة التي ستتولى إيصالها للمعلق الصوتي
-                </p>
+                <h3 className="font-black text-gray-900 mb-2 flex items-center gap-2"><MessageSquare size={16} className="text-red-600" /> إرسال ملاحظات للإدارة</h3>
+                <p className="text-gray-400 font-bold text-xs mb-3">ستصل ملاحظاتك للمديرة التي ستتولى إيصالها للمعلق الصوتي</p>
                 {feedbackSent ? (
                   <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 text-center">
                     <p className="text-emerald-700 font-black">✅ تم إرسال ملاحظاتك بنجاح!</p>
-                    <p className="text-emerald-600 font-bold text-xs mt-1">ستتواصل معك الإدارة قريباً</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <textarea
-                      value={feedbackText}
-                      onChange={e => setFeedbackText(e.target.value)}
-                      rows={4}
+                    <textarea value={feedbackText} onChange={e => setFeedbackText(e.target.value)} rows={4}
                       className="w-full px-4 py-3 rounded-2xl border border-gray-200 outline-none font-bold text-sm resize-none focus:border-red-400 transition"
-                      placeholder="اكتب ملاحظاتك هنا... مثلاً: أريد تغيير النبرة، أو تعديل في الفقرة الثانية..." />
-                    <button
-                      onClick={handleSendFeedback}
-                      disabled={sendingFeedback || !feedbackText.trim()}
+                      placeholder="اكتب ملاحظاتك هنا..." />
+                    <button onClick={handleSendFeedback} disabled={sendingFeedback || !feedbackText.trim()}
                       className="w-full bg-red-600 text-white py-3 rounded-2xl font-black hover:bg-red-700 disabled:bg-gray-200 disabled:text-gray-400 transition flex items-center justify-center gap-2">
-                      <Send size={16} />
-                      {sendingFeedback ? 'جاري الإرسال...' : 'إرسال الملاحظات للإدارة'}
+                      <Send size={16} />{sendingFeedback ? 'جاري الإرسال...' : 'إرسال الملاحظات'}
                     </button>
                   </div>
                 )}
@@ -356,7 +409,7 @@ export default function ClientDashboard() {
         </div>
       )}
 
-      {/* نموذج الطلب الجديد */}
+      {/* New Order Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -364,13 +417,12 @@ export default function ClientDashboard() {
               <h2 className="text-2xl font-black text-gray-900">طلب جديد</h2>
               <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600"><X size={24} /></button>
             </div>
-
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label className="block text-sm font-black text-gray-700 mb-2">اختر الباقة *</label>
                 {packages.length === 0 ? (
                   <div className="flex items-center gap-2 text-gray-400 font-bold text-sm bg-gray-50 px-4 py-3 rounded-xl border border-gray-200">
-                    <Tag size={16} /> لا توجد باقات متاحة حالياً — تواصل مع الإدارة
+                    <Tag size={16} /> لا توجد باقات متاحة حالياً
                   </div>
                 ) : (
                   <>
@@ -402,19 +454,17 @@ export default function ClientDashboard() {
                   </>
                 )}
               </div>
-
               <div>
                 <label className="block text-sm font-black text-gray-700 mb-2">اختر المعلق الصوتي *</label>
                 <select value={selectedVoiceActor} onChange={e => setSelectedVoiceActor(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400">
                   <option value="">— اختر المعلق —</option>
                   {artists.map(a => (
-                    <option key={a.id} value={a.name}>{a.name}{a.voiceType ? ` — ${a.voiceType}` : ''}{a.gender ? ` — ${a.gender}` : ''}</option>
+                    <option key={a.id} value={a.name}>{a.name}{a.voiceType ? ` — ${a.voiceType}` : ''}</option>
                   ))}
                   <option value="اختيار الأنسب من طرفكم">اختيار الأنسب من طرفكم</option>
                 </select>
               </div>
-
               <div>
                 <label className="block text-sm font-black text-gray-700 mb-2">نوع العمل *</label>
                 <select value={workType} onChange={e => setWorkType(e.target.value)}
@@ -423,30 +473,26 @@ export default function ClientDashboard() {
                   {workTypes.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
-
               <div>
-                <label className="block text-sm font-black text-gray-700 mb-2">النص الكامل وتفاصيل المشروع *</label>
-                <textarea value={description} onChange={e => setDescription(e.target.value)}
-                  required rows={5}
+                <label className="block text-sm font-black text-gray-700 mb-2">النص وتفاصيل المشروع *</label>
+                <textarea value={description} onChange={e => setDescription(e.target.value)} required rows={5}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm resize-none focus:border-red-400"
-                  placeholder="اكتب النص المراد تسجيله وأي تفاصيل أخرى (النبرة المطلوبة، السرعة، الجمهور المستهدف...)" />
+                  placeholder="اكتب النص المراد تسجيله وأي تفاصيل أخرى..." />
               </div>
-
               <div>
                 <label className="block text-sm font-black text-gray-700 mb-2">ملف مرفق (اختياري)</label>
                 <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center hover:border-red-400 transition">
                   <input type="file" id="attachFile" onChange={e => setAttachedFile(e.target.files?.[0] || null)} className="hidden" />
                   <label htmlFor="attachFile" className="cursor-pointer">
                     <FileText size={24} className="text-gray-300 mx-auto mb-2" />
-                    <p className="text-gray-400 font-bold text-sm">{attachedFile ? attachedFile.name : 'اضغط لرفع ملف (PDF، Word، صوت...)'}</p>
+                    <p className="text-gray-400 font-bold text-sm">{attachedFile ? attachedFile.name : 'اضغط لرفع ملف'}</p>
                   </label>
                 </div>
+                {storageWarning && <p className="text-orange-500 font-bold text-xs mt-2">⚠️ {storageWarning}</p>}
               </div>
-
               {formError && (
                 <div className="bg-red-50 border border-red-100 text-red-600 text-sm font-bold text-center py-3 px-4 rounded-xl">{formError}</div>
               )}
-
               <button type="submit" disabled={submitting}
                 className="w-full bg-red-600 text-white py-4 rounded-2xl font-black text-lg hover:bg-gray-900 disabled:bg-gray-200 transition-all">
                 {submitting ? 'جاري الإرسال...' : 'إرسال الطلب'}
