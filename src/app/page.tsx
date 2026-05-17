@@ -23,7 +23,14 @@ interface Artist {
   voiceType?: string; gender?: string;
 }
 interface Partner { id: string; name: string; logo?: string; }
-interface PackageItem { id: string; name: string; price: string; desc: string; features: string[]; popular: boolean; }
+interface PackageItem {
+  id: string;
+  name: string; nameEn?: string;
+  price: string;
+  desc: string; descEn?: string;
+  features: string[]; featuresEn?: string[];
+  popular: boolean;
+}
 
 export default function Home() {
   const { userRole, mounted, logout } = useAuth();
@@ -384,19 +391,24 @@ export default function Home() {
                   const popular = packages.find(p => p.popular);
                   const others = packages.filter(p => !p.popular);
                   return popular && others.length >= 2 ? [others[0], popular, ...others.slice(1)] : packages;
-                })().map(plan => (
-                  <div key={plan.id} className={`p-8 rounded-3xl border-2 bg-white transition-all relative ${plan.popular ? 'border-red-600 shadow-2xl scale-105' : 'border-gray-100'}`}>
-                    {plan.popular && <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-1 rounded-full font-black text-sm">{t('pricing.popular')}</div>}
-                    <h3 className="text-xl font-black text-gray-900 mb-1">{plan.name}</h3>
-                    <p className="text-gray-400 font-bold text-sm mb-6">{plan.desc}</p>
-                    <div className="mb-8"><span className="text-4xl font-black text-red-600">{plan.price}</span><span className="text-gray-400 font-bold text-xs mx-2">{t('pricing.unit')}</span></div>
-                    <ul className="space-y-3 mb-8">{plan.features?.map((f, j) => <li key={j} className="flex items-center gap-2 text-sm font-bold text-gray-600"><CheckCircle2 size={16} className="text-red-600 flex-shrink-0" />{f}</li>)}</ul>
-                    <Link href={mounted && userRole !== 'visitor' ? '/client-dashboard' : '/register'}
-                      className={`w-full py-3 rounded-2xl block text-center font-black transition-all ${plan.popular ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-gray-900 text-white hover:bg-gray-700'}`}>
-                      {t('pricing.cta')}
-                    </Link>
-                  </div>
-                ))}
+                })().map(plan => {
+                  const planName = lang === 'en' ? (plan.nameEn || plan.name) : plan.name;
+                  const planDesc = lang === 'en' ? (plan.descEn || plan.desc) : plan.desc;
+                  const planFeatures = lang === 'en' && plan.featuresEn?.length ? plan.featuresEn : plan.features;
+                  return (
+                    <div key={plan.id} className={`p-8 rounded-3xl border-2 bg-white transition-all relative ${plan.popular ? 'border-red-600 shadow-2xl scale-105' : 'border-gray-100'}`}>
+                      {plan.popular && <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-1 rounded-full font-black text-sm">{t('pricing.popular')}</div>}
+                      <h3 className="text-xl font-black text-gray-900 mb-1">{planName}</h3>
+                      <p className="text-gray-400 font-bold text-sm mb-6">{planDesc}</p>
+                      <div className="mb-8"><span className="text-4xl font-black text-red-600">{plan.price}</span><span className="text-gray-400 font-bold text-xs mx-2">{t('pricing.unit')}</span></div>
+                      <ul className="space-y-3 mb-8">{planFeatures?.map((f, j) => <li key={j} className="flex items-center gap-2 text-sm font-bold text-gray-600"><CheckCircle2 size={16} className="text-red-600 flex-shrink-0" />{f}</li>)}</ul>
+                      <Link href={mounted && userRole !== 'visitor' ? '/client-dashboard' : '/register'}
+                        className={`w-full py-3 rounded-2xl block text-center font-black transition-all ${plan.popular ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-gray-900 text-white hover:bg-gray-700'}`}>
+                        {t('pricing.cta')}
+                      </Link>
+                    </div>
+                  );
+                })}
               </div>
             )}
         </div>
