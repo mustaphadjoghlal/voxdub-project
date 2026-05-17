@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { collection, getDocs, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './components/firebase';
@@ -8,7 +8,7 @@ import { useAuth } from './context/AuthContext';
 import {
   Mic2, Play, Pause, Award, Star, Mic,
   Search, MessageSquare, Headphones, FileCheck,
-  CheckCircle2, Bell, User, LogOut, LayoutDashboard, Building2, Filter
+  CheckCircle2, User, LogOut, LayoutDashboard, Building2
 } from 'lucide-react';
 import ServicesSection from './components/ServicesSection';
 import LanguageToggle from './components/LanguageToggle';
@@ -34,7 +34,9 @@ export default function Home() {
   const [packages, setPackages] = useState<PackageItem[]>([]);
   const [loadingArtists, setLoadingArtists] = useState(true);
   const [playingId, setPlayingId] = useState<string | null>(null);
-  const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
+  const [audioProgress, setAudioProgress] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const [loggedInArtist, setLoggedInArtist] = useState<Artist | null>(null);
   const [loggedInArtistDocId, setLoggedInArtistDocId] = useState<string | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -61,7 +63,7 @@ export default function Home() {
       try {
         const snapshot = await getDocs(collection(db, 'artists'));
         const data = snapshot.docs
-          .map(doc => ({ id: doc.id, ...doc.data() } as Artist))
+          .map(d => ({ id: d.id, ...d.data() } as Artist))
           .filter(a => a.name && (a as any).audioSamples?.some((s: any) => !s.pendingApproval));
         setArtists(data);
       } catch (err) { console.error(err); } finally { setLoadingArtists(false); }
@@ -83,16 +85,36 @@ export default function Home() {
     }).catch(() => {});
   }, [userRole, mounted]);
 
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
   const toggleAudio = (artist: Artist) => {
     const audioUrl = getAudioUrl(artist);
     if (!audioUrl) return;
-    if (playingId === artist.id) { currentAudio?.pause(); setPlayingId(null); return; }
-    if (currentAudio) currentAudio.pause();
+    if (playingId === artist.id) {
+      currentAudioRef.current?.pause();
+      setPlayingId(null);
+      setAudioProgress(0);
+      setAudioDuration(0);
+      return;
+    }
+    if (currentAudioRef.current) currentAudioRef.current.pause();
     const audio = new Audio(audioUrl);
     audio.play().catch(() => {});
-    setCurrentAudio(audio);
+    audio.addEventListener('timeupdate', () => {
+      setAudioProgress(audio.currentTime);
+    });
+    audio.addEventListener('loadedmetadata', () => {
+      setAudioDuration(audio.duration);
+    });
+    currentAudioRef.current = audio;
     setPlayingId(artist.id);
-    audio.onended = () => setPlayingId(null);
+    setAudioProgress(0);
+    setAudioDuration(0);
+    audio.onended = () => { setPlayingId(null); setAudioProgress(0); setAudioDuration(0); };
   };
 
   const handleLogout = () => { logout(); setShowUserMenu(false); setLoggedInArtist(null); };
@@ -238,7 +260,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Artists — with search, filter, pagination */}
+      {/* Artists */}
       <section id="artists" className="py-24 bg-gray-50">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-12">
@@ -281,6 +303,7 @@ export default function Home() {
                   const hasAudio = !!audioUrl;
                   const isPlaying = playingId === artist.id;
                   const isMine = isCurrentArtist(artist.id);
+                  const progressPct = audioDuration > 0 ? (audioProgress / audioDuration) * 100 : 0;
                   return (
                     <div key={artist.id} className={`rounded-3xl p-8 text-white hover:-translate-y-2 transition-transform duration-300 relative ${isMine ? 'bg-red-700 ring-4 ring-red-400' : 'bg-gray-900'}`}>
                       {isMine && <div className="absolute -top-3 -right-3 bg-red-500 text-white text-xs font-black px-3 py-1 rounded-full border-2 border-white shadow-lg">ملفك ✨</div>}
@@ -296,8 +319,25 @@ export default function Home() {
                               )}
                               <h3 className={`text-2xl font-black ${isPlaying ? 'text-red-400' : 'text-white'}`}>{artist.name}</h3>
                             </div>
-                            {hasAudio && <p className="text-xs text-gray-500 mt-1 font-bold">{isPlaying ? '▶ جاري التشغيل...' : 'اضغط للاستماع'}</p>}
                           </button>
+
+                          {/* Progress bar — only shown while playing */}
+                          {isPlaying && (
+                            <div className="mt-3">
+                              <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-red-500 rounded-full transition-all duration-200"
+                                  style={{ width: `${progressPct}%` }}
+                                />
+                              </div>
+                              <div className="flex justify-between text-xs text-gray-500 mt-1 font-bold">
+                                <span>{formatTime(audioProgress)}</span>
+                                {audioDuration > 0 && <span>{formatTime(audioDuration)}</span>}
+                              </div>
+                            </div>
+                          )}
+                          {!isPlaying && hasAudio && <p className="text-xs text-gray-500 mt-1 font-bold">اضغط للاستماع</p>}
+
                           {artist.rating && (
                             <div className="flex items-center justify-end gap-1 mt-2">
                               {[1,2,3,4,5].map(s => <Star key={s} size={13} className={s <= Math.round(artist.rating!) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-600'} />)}
@@ -403,7 +443,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Contact Form */}
+      {/* Contact */}
       <section id="contact" className="py-24 bg-gray-50">
         <div className="max-w-2xl mx-auto px-6">
           <div className="text-center mb-12">
