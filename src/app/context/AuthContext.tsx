@@ -2,10 +2,12 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../components/firebase';
 
 type Role = 'admin' | 'artist' | 'client' | 'visitor';
+
+const ADMIN_EMAIL = 'admin@voxdub.com';
 
 interface AuthContextType {
   userRole: Role;
@@ -23,8 +25,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // المدير
-        if (firebaseUser.email === 'admin@voxdub.com') {
+        // Admin: verify by email from Firebase Auth (not localStorage)
+        if (firebaseUser.email === ADMIN_EMAIL) {
           setRoleState('admin');
           localStorage.setItem('userRole', 'admin');
           localStorage.setItem('userId', 'admin');
@@ -32,33 +34,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        // نتحقق إذا في localStorage role محفوظ
-        const savedRole = localStorage.getItem('userRole');
-        if (savedRole === 'artist' || savedRole === 'client') {
-          setRoleState(savedRole);
-          setMounted(true);
-          return;
-        }
-
-        // نبحث في Firestore لتحديد الدور
+        // Verify role from Firestore
         try {
           const artistsSnap = await getDocs(collection(db, 'artists'));
-          const artist = artistsSnap.docs.find(d => d.data().email === firebaseUser.email);
-          if (artist) {
+          const artistDoc = artistsSnap.docs.find(d => d.data().email === firebaseUser.email);
+          if (artistDoc) {
             setRoleState('artist');
             localStorage.setItem('userRole', 'artist');
-            localStorage.setItem('userId', artist.id);
+            localStorage.setItem('userId', artistDoc.id);
             setMounted(true);
             return;
           }
 
           const clientsSnap = await getDocs(collection(db, 'clients'));
-          const client = clientsSnap.docs.find(d => d.data().email === firebaseUser.email);
-          if (client) {
+          const clientDoc = clientsSnap.docs.find(d => d.data().email === firebaseUser.email);
+          if (clientDoc) {
             setRoleState('client');
             localStorage.setItem('userRole', 'client');
-            localStorage.setItem('userId', client.id);
-            localStorage.setItem('userName', client.data().name || '');
+            localStorage.setItem('userId', clientDoc.id);
+            localStorage.setItem('userName', clientDoc.data().name || '');
             setMounted(true);
             return;
           }
@@ -69,14 +63,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setRoleState('visitor');
         setMounted(true);
       } else {
-        // لا يوجد مستخدم مسجل في Firebase Auth
-        // نتحقق من localStorage (للمدير الذي قد لا يكون في Firebase Auth)
-        const savedRole = localStorage.getItem('userRole');
-        if (savedRole === 'admin' || savedRole === 'artist' || savedRole === 'client') {
-          setRoleState(savedRole as Role);
-        } else {
-          setRoleState('visitor');
-        }
+        // No Firebase session — always visitor, clear any stale localStorage
+        localStorage.removeItem('userRole');
+        localStorage.removeItem('userId');
+        setRoleState('visitor');
         setMounted(true);
       }
     });
