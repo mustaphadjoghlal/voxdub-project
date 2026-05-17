@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy, query } from 'firebase/firestore'
 import { db } from './firebase'
-import { Plus, Edit3, Trash2, Save, X, Mic2, Building } from 'lucide-react'
+import { Plus, Edit3, Trash2, Save, X } from 'lucide-react'
 
 interface ServiceItem {
   id: string
