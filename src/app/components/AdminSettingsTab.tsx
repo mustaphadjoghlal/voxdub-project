@@ -14,6 +14,7 @@ interface SiteSettings {
   heroTitleEn: string
   heroSubtitleAr: string
   heroSubtitleEn: string
+  aboutImages: string[]
 }
 
 const DEFAULT: SiteSettings = {
@@ -25,6 +26,7 @@ const DEFAULT: SiteSettings = {
   heroTitleEn: 'Professional Voice-Over Platform',
   heroSubtitleAr: 'اكتشف أفضل المعلقين الصوتيين في العالم العربي',
   heroSubtitleEn: 'Discover the best voice-over artists in the Arab world',
+  aboutImages: ['', '', ''],
 }
 
 const PRESET_COLORS = [
@@ -47,15 +49,29 @@ export default function AdminSettingsTab() {
   const [uploading, setUploading] = useState(false)
   const logoInputRef = useRef<HTMLInputElement>(null)
 
+  const aboutImgRef0 = useRef<HTMLInputElement>(null)
+  const aboutImgRef1 = useRef<HTMLInputElement>(null)
+  const aboutImgRef2 = useRef<HTMLInputElement>(null)
+  const aboutImgRefs = [aboutImgRef0, aboutImgRef1, aboutImgRef2]
+  const [aboutImgFiles, setAboutImgFiles] = useState<(File | null)[]>([null, null, null])
+  const [aboutImgPreviews, setAboutImgPreviews] = useState<string[]>(['', '', ''])
+  const [aboutImgUploading, setAboutImgUploading] = useState<boolean[]>([false, false, false])
+
   useEffect(() => {
     const fetch = async () => {
       try {
         const snap = await getDoc(doc(db, 'settings', 'main'))
         if (snap.exists()) {
           const data = { ...DEFAULT, ...snap.data() } as SiteSettings
+          if (!Array.isArray(data.aboutImages)) data.aboutImages = ['', '', '']
           setSettings(data)
           if (data.primaryColor) document.documentElement.style.setProperty('--primary-color', data.primaryColor)
           if (data.logoUrl) setLogoPreview(data.logoUrl)
+          setAboutImgPreviews([
+            data.aboutImages[0] || '',
+            data.aboutImages[1] || '',
+            data.aboutImages[2] || '',
+          ])
         }
       } catch {}
     }
@@ -84,6 +100,23 @@ export default function AdminSettingsTab() {
       setLogoPreview(url)
       await saveSettings({ logoUrl: url })
     } catch { alert('فشل رفع الشعار') } finally { setUploading(false) }
+  }
+
+  const handleAboutImgUpload = async (idx: number) => {
+    const file = aboutImgFiles[idx]
+    if (!file) return
+    setAboutImgUploading(prev => { const n = [...prev]; n[idx] = true; return n })
+    try {
+      const storageRef = ref(storage, `site/about_img_${idx}_${Date.now()}`)
+      await uploadBytes(storageRef, file)
+      const url = await getDownloadURL(storageRef)
+      const newImages = [...(settings.aboutImages || ['', '', ''])]
+      newImages[idx] = url
+      setAboutImgPreviews(prev => { const n = [...prev]; n[idx] = url; return n })
+      await saveSettings({ aboutImages: newImages })
+    } catch { alert('فشل رفع الصورة') } finally {
+      setAboutImgUploading(prev => { const n = [...prev]; n[idx] = false; return n })
+    }
   }
 
   const applyColor = (color: string) => {
@@ -198,6 +231,56 @@ export default function AdminSettingsTab() {
               {uploading ? 'جاري الرفع...' : 'رفع الشعار'}
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* About Page Images */}
+      <div className="glass rounded-2xl p-6">
+        <div className="flex items-center gap-2 mb-5">
+          <div className="w-8 h-8 bg-purple-600/20 rounded-lg flex items-center justify-center">
+            <ImageIcon size={16} className="text-purple-400" />
+          </div>
+          <h3 className="text-white font-black">صور صفحة "من نحن"</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {[0, 1, 2].map(i => (
+            <div key={i} className="space-y-3">
+              <label className="text-gray-400 font-black text-xs block">الصورة {i + 1}</label>
+              <div className="w-full bg-white/5 border border-white/10 rounded-xl flex items-center justify-center overflow-hidden" style={{ aspectRatio: '4/3' }}>
+                {aboutImgPreviews[i]
+                  ? <img src={aboutImgPreviews[i]} alt={`about-${i + 1}`} className="w-full h-full object-cover" />
+                  : <span className="text-gray-600 font-bold text-sm">لا توجد صورة</span>
+                }
+              </div>
+              <div
+                className="border-2 border-dashed border-white/10 rounded-xl p-3 text-center hover:border-purple-500/50 cursor-pointer transition"
+                onClick={() => aboutImgRefs[i].current?.click()}
+              >
+                <input
+                  ref={aboutImgRefs[i]}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={e => {
+                    const f = e.target.files?.[0]
+                    if (f) {
+                      setAboutImgFiles(prev => { const n = [...prev]; n[i] = f; return n })
+                      setAboutImgPreviews(prev => { const n = [...prev]; n[i] = URL.createObjectURL(f); return n })
+                    }
+                  }}
+                />
+                <p className="text-gray-400 font-bold text-xs">{aboutImgFiles[i] ? (aboutImgFiles[i] as File).name : 'اختر صورة'}</p>
+              </div>
+              <button
+                onClick={() => handleAboutImgUpload(i)}
+                disabled={!aboutImgFiles[i] || aboutImgUploading[i]}
+                className="w-full bg-purple-600 text-white py-2 rounded-xl font-black text-xs hover:bg-purple-700 disabled:opacity-40 transition flex items-center justify-center gap-1.5"
+              >
+                <Upload size={13} />
+                {aboutImgUploading[i] ? 'جاري الرفع...' : 'رفع الصورة'}
+              </button>
+            </div>
+          ))}
         </div>
       </div>
 
