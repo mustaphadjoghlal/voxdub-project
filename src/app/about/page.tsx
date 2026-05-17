@@ -26,6 +26,7 @@ export default function AboutPage() {
   const [lang, setLang] = useState<'ar' | 'en'>('ar')
   const [logoUrl, setLogoUrl] = useState('')
   const [primaryColor, setPrimaryColor] = useState('#dc2626')
+  const [aboutImages, setAboutImages] = useState<string[]>([])
 
   useEffect(() => {
     const savedLang = (localStorage.getItem('voxdub-lang') || 'ar') as 'ar' | 'en'
@@ -39,6 +40,7 @@ export default function AboutPage() {
         if (d.aboutUsEn) setContentEn(d.aboutUsEn)
         if (d.logoUrl) setLogoUrl(d.logoUrl)
         if (d.primaryColor) { setPrimaryColor(d.primaryColor); document.documentElement.style.setProperty('--primary-color', d.primaryColor) }
+        if (Array.isArray(d.aboutImages)) setAboutImages(d.aboutImages)
       }
     }).catch(() => {})
   }, [])
@@ -76,14 +78,12 @@ export default function AboutPage() {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24, marginTop: 40 }}>
-          {[
-            { num: '50+',  ar: 'معلق صوتي',   en: 'Voice Artists' },
-            { num: '500+', ar: 'مشروع منجز',   en: 'Projects Done' },
-            { num: '100%', ar: 'رضا العملاء',  en: 'Satisfaction'  },
-          ].map((s, i) => (
-            <div key={i} style={{ background: 'white', borderRadius: 16, padding: 32, textAlign: 'center', boxShadow: '0 4px 24px rgba(0,0,0,0.06)' }}>
-              <div style={{ fontSize: 36, fontWeight: 900, color: primaryColor }}>{s.num}</div>
-              <div style={{ color: '#6b7280', marginTop: 8 }}>{isRTL ? s.ar : s.en}</div>
+          {[0, 1, 2].map(i => (
+            <div key={i} style={{ background: 'white', borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.06)', aspectRatio: '4/3', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {aboutImages[i]
+                ? <img src={aboutImages[i]} alt={`about-${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : <div style={{ color: '#d1d5db', fontSize: 48, lineHeight: 1 }}>&#128444;</div>
+              }
             </div>
           ))}
         </div>
