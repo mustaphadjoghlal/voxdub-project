@@ -17,9 +17,9 @@ import { useSettings } from './context/SettingsContext';
 
 interface AudioSample { name: string; url: string; pendingApproval?: boolean; }
 interface Artist {
-  id: string; name: string; role?: string; style?: string; rating?: number;
-  experience?: string; language?: string; image?: string; profilePicture?: string;
-  audioSamples?: AudioSample[] | string[]; audio?: string; uid?: string;
+  id: string; name: string; rating?: number; experience?: string;
+  image?: string; profilePicture?: string;
+  audioSamples?: AudioSample[] | string[]; audio?: string;
   voiceType?: string; gender?: string;
 }
 interface Partner { id: string; name: string; logo?: string; }
@@ -50,12 +50,11 @@ export default function Home() {
   const [contactLoading, setContactLoading] = useState(false);
 
   const getAudioUrl = (artist: Artist): string | null => {
-    if (!artist.audioSamples || artist.audioSamples.length === 0) return artist.audio || null;
+    if (!artist.audioSamples?.length) return artist.audio || null;
     const approved = artist.audioSamples.find((s: any) => typeof s === 'object' && 'url' in s && !s.pendingApproval);
     if (approved && typeof approved === 'object' && 'url' in approved) return (approved as AudioSample).url;
     const first = artist.audioSamples[0];
-    if (typeof first === 'string') return first;
-    return artist.audio || null;
+    return typeof first === 'string' ? first : artist.audio || null;
   };
 
   useEffect(() => {
@@ -66,8 +65,8 @@ export default function Home() {
       ))
       .catch(console.error)
       .finally(() => setLoadingArtists(false));
-    getDocs(collection(db, 'partners')).then(snap => setPartners(snap.docs.map(d => ({ id: d.id, ...d.data() } as Partner)))).catch(() => {});
-    getDocs(collection(db, 'packages')).then(snap => setPackages(snap.docs.map(d => ({ id: d.id, ...d.data() } as PackageItem)))).catch(() => {});
+    getDocs(collection(db, 'partners')).then(s => setPartners(s.docs.map(d => ({ id: d.id, ...d.data() } as Partner)))).catch(() => {});
+    getDocs(collection(db, 'packages')).then(s => setPackages(s.docs.map(d => ({ id: d.id, ...d.data() } as PackageItem)))).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -86,10 +85,9 @@ export default function Home() {
     if (!audioUrl) return;
     if (playingId === artist.id) {
       currentAudioRef.current?.pause();
-      setPlayingId(null); setAudioProgress(0); setAudioDuration(0);
-      return;
+      setPlayingId(null); setAudioProgress(0); setAudioDuration(0); return;
     }
-    if (currentAudioRef.current) currentAudioRef.current.pause();
+    currentAudioRef.current?.pause();
     const audio = new Audio(audioUrl);
     audio.play().catch(() => {});
     audio.addEventListener('timeupdate', () => setAudioProgress(audio.currentTime));
@@ -100,7 +98,6 @@ export default function Home() {
   };
 
   const handleLogout = () => { logout(); setShowUserMenu(false); setLoggedInArtist(null); };
-  const isCurrentArtist = (id: string) => loggedInArtistDocId === id;
 
   const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setContactLoading(true);
@@ -111,10 +108,10 @@ export default function Home() {
     setContactLoading(false);
   };
 
-  const filteredArtists = artists.filter(a => {
-    const q = searchQuery.toLowerCase();
-    return (!q || a.name?.toLowerCase().includes(q)) && (genderFilter === 'all' || a.gender === genderFilter);
-  });
+  const filteredArtists = artists.filter(a =>
+    (!searchQuery || a.name?.toLowerCase().includes(searchQuery.toLowerCase())) &&
+    (genderFilter === 'all' || a.gender === genderFilter)
+  );
   const visibleArtists = filteredArtists.slice(0, visibleCount);
   const dir = isRTL ? 'rtl' : 'ltr';
 
@@ -123,7 +120,7 @@ export default function Home() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
         * { font-family: 'Cairo', sans-serif; }
-        @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        @keyframes marquee { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
         .animate-marquee { animation: marquee 20s linear infinite; }
         .animate-marquee:hover { animation-play-state: paused; }
       `}</style>
@@ -132,16 +129,11 @@ export default function Home() {
       <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-gray-100 h-20 flex items-center">
         <div className="max-w-7xl mx-auto px-6 w-full flex justify-between items-center">
           <div className="flex items-center gap-2">
-            {settings.logoUrl ? (
-              <img src={settings.logoUrl} alt="VoxDub" className="h-10 w-auto object-contain" />
-            ) : (
-              <>
-                <div className="p-2 rounded-xl" style={{ backgroundColor: settings.primaryColor || '#dc2626' }}>
-                  <Mic2 className="text-white w-5 h-5" />
-                </div>
-                <span className="text-2xl font-black">Vox<span style={{ color: settings.primaryColor || '#dc2626' }}>Dub</span></span>
-              </>
-            )}
+            {settings.logoUrl
+              ? <img src={settings.logoUrl} alt="VoxDub" className="h-10 w-auto object-contain" />
+              : <><div className="p-2 rounded-xl" style={{ backgroundColor: settings.primaryColor || '#dc2626' }}><Mic2 className="text-white w-5 h-5" /></div>
+                 <span className="text-2xl font-black">Vox<span style={{ color: settings.primaryColor || '#dc2626' }}>Dub</span></span></>
+            }
           </div>
           <div className="flex items-center gap-3">
             <a href="#services" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">{t('nav.services')}</a>
@@ -153,27 +145,20 @@ export default function Home() {
             {!mounted ? <div className="w-32 h-10 bg-gray-100 rounded-full animate-pulse" /> : (
               <>
                 {userRole === 'visitor' && (
-                  <>
-                    <Link href="/login" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">{t('nav.login')}</Link>
-                    <Link href="/register" className="bg-red-600 text-white font-bold py-2 px-6 rounded-full hover:bg-red-700 transition">{t('nav.register')}</Link>
-                  </>
+                  <><Link href="/login" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">{t('nav.login')}</Link>
+                    <Link href="/register" className="bg-red-600 text-white font-bold py-2 px-6 rounded-full hover:bg-red-700 transition">{t('nav.register')}</Link></>
                 )}
                 {userRole === 'artist' && loggedInArtist && (
                   <div className="relative">
-                    <button onClick={() => setShowUserMenu(!showUserMenu)}
-                      className="flex items-center gap-2 bg-gray-900 text-white py-2 px-4 rounded-full font-black text-sm hover:bg-red-600 transition">
+                    <button onClick={() => setShowUserMenu(!showUserMenu)} className="flex items-center gap-2 bg-gray-900 text-white py-2 px-4 rounded-full font-black text-sm hover:bg-red-600 transition">
                       <div className="w-6 h-6 rounded-full overflow-hidden bg-gray-600 flex-shrink-0">
-                        {loggedInArtist.profilePicture
-                          ? <img src={loggedInArtist.profilePicture} alt="" className="w-full h-full object-cover" />
-                          : <div className="w-full h-full flex items-center justify-center text-xs font-black">{loggedInArtist.name?.[0]}</div>}
+                        {loggedInArtist.profilePicture ? <img src={loggedInArtist.profilePicture} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-xs font-black">{loggedInArtist.name?.[0]}</div>}
                       </div>
                       {t('nav.myAccount')}
                     </button>
                     {showUserMenu && (
                       <div className={`absolute ${isRTL ? 'left-0' : 'right-0'} top-14 bg-white rounded-2xl shadow-xl border border-gray-100 w-52 overflow-hidden z-50`}>
-                        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
-                          <p className="font-black text-gray-900 text-sm">{loggedInArtist.name}</p>
-                        </div>
+                        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50"><p className="font-black text-gray-900 text-sm">{loggedInArtist.name}</p></div>
                         <Link href={`/artists/${loggedInArtistDocId}`} onClick={() => setShowUserMenu(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-gray-700 font-bold text-sm"><User size={16} className="text-red-600" /> {t('nav.profile')}</Link>
                         <Link href="/dashboard" onClick={() => setShowUserMenu(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-gray-700 font-bold text-sm"><LayoutDashboard size={16} className="text-red-600" /> {t('nav.dashboard')}</Link>
                         <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50 transition text-red-600 font-bold text-sm border-t border-gray-100"><LogOut size={16} /> {t('nav.logout')}</button>
@@ -210,11 +195,7 @@ export default function Home() {
         <div className="max-w-4xl mx-auto">
           <div className="inline-block bg-red-50 text-red-600 font-black px-5 py-2 rounded-full text-sm mb-8 border border-red-100">{t('hero.badge')}</div>
           <h1 className="text-6xl md:text-7xl font-black text-gray-900 mb-8 leading-tight">
-            {t('hero.title').split('\n').map((line, i) => (
-              <React.Fragment key={i}>
-                {i === 0 ? line : <><br /><span className="text-red-600">{line}</span></>}
-              </React.Fragment>
-            ))}
+            {t('hero.title1')}<br /><span className="text-red-600">{t('hero.title2')}</span>
           </h1>
           <p className="text-xl text-gray-500 max-w-2xl mx-auto mb-12 leading-relaxed font-bold">{t('hero.subtitle')}</p>
           <div className="flex flex-wrap justify-center gap-4">
@@ -236,13 +217,11 @@ export default function Home() {
       {/* Why VoxDub */}
       <section className="py-24 bg-gray-950 rounded-[3rem] mx-4 text-white text-center">
         <div className="max-w-6xl mx-auto px-6">
-          <h2 className="text-4xl font-black mb-16">{t('why.title').replace('VoxDub', '')} <span className="text-red-500">VoxDub</span>{t('why.title').includes('?') ? '?' : ''}</h2>
+          <h2 className="text-4xl font-black mb-16">
+            {t('why.pre')} <span className="text-red-500">VoxDub</span>?
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[
-              { icon: Mic, k: 'why.f1' },
-              { icon: Headphones, k: 'why.f2' },
-              { icon: FileCheck, k: 'why.f3' },
-            ].map(({ icon: Icon, k }) => (
+            {[{ icon: Mic, k: 'why.f1' }, { icon: Headphones, k: 'why.f2' }, { icon: FileCheck, k: 'why.f3' }].map(({ icon: Icon, k }) => (
               <div key={k} className="bg-white/5 p-8 rounded-3xl border border-white/10">
                 <div className="w-16 h-16 bg-red-600/20 rounded-2xl flex items-center justify-center mx-auto mb-6"><Icon size={32} className="text-red-500" /></div>
                 <h3 className="text-2xl font-black mb-3">{t(`${k}.title`)}</h3>
@@ -263,11 +242,9 @@ export default function Home() {
           <div className="flex flex-wrap items-center gap-3 mb-10 justify-center">
             <div className="relative">
               <Search size={16} className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-gray-400`} />
-              <input type="text" value={searchQuery}
-                onChange={e => { setSearchQuery(e.target.value); setVisibleCount(6); }}
+              <input type="text" value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setVisibleCount(6); }}
                 placeholder={t('artists.search')}
-                className={`${isRTL ? 'pr-9 pl-4' : 'pl-9 pr-4'} py-3 rounded-2xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition w-64`}
-              />
+                className={`${isRTL ? 'pr-9 pl-4' : 'pl-9 pr-4'} py-3 rounded-2xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition w-64`} />
             </div>
             <div className="flex gap-2">
               {(['all', 'male', 'female'] as const).map(g => (
@@ -278,7 +255,6 @@ export default function Home() {
               ))}
             </div>
           </div>
-
           {loadingArtists ? (
             <div className="text-center py-20 text-gray-400 font-bold">{lang === 'ar' ? 'جاري تحميل المعلقين...' : 'Loading artists...'}</div>
           ) : filteredArtists.length === 0 ? (
@@ -286,19 +262,19 @@ export default function Home() {
           ) : (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {visibleArtists.map((artist) => {
+                {visibleArtists.map(artist => {
                   const hasAudio = !!getAudioUrl(artist);
                   const isPlaying = playingId === artist.id;
-                  const isMine = isCurrentArtist(artist.id);
+                  const isMine = loggedInArtistDocId === artist.id;
                   const pct = audioDuration > 0 ? (audioProgress / audioDuration) * 100 : 0;
                   return (
                     <div key={artist.id} className={`rounded-3xl p-8 text-white hover:-translate-y-2 transition-transform duration-300 relative ${isMine ? 'bg-red-700 ring-4 ring-red-400' : 'bg-gray-900'}`}>
                       {isMine && <div className={`absolute -top-3 ${isRTL ? '-right-3' : '-left-3'} bg-red-500 text-white text-xs font-black px-3 py-1 rounded-full border-2 border-white shadow-lg`}>{lang === 'ar' ? 'ملفك ✨' : 'Your Profile ✨'}</div>}
                       <div className="flex justify-between items-start mb-6">
                         <Award size={22} className={`${isMine ? 'text-yellow-300' : 'text-red-400'} opacity-60 flex-shrink-0`} />
-                        <div className="text-right flex-1 mr-3">
-                          <button onClick={() => toggleAudio(artist)} disabled={!hasAudio} className={`text-right w-full group ${hasAudio ? 'cursor-pointer' : 'cursor-default'}`}>
-                            <div className="flex items-center justify-end gap-2">
+                        <div className={`flex-1 ${isRTL ? 'mr-3 text-right' : 'ml-3 text-left'}`}>
+                          <button onClick={() => toggleAudio(artist)} disabled={!hasAudio} className={`w-full group ${hasAudio ? 'cursor-pointer' : 'cursor-default'}`}>
+                            <div className={`flex items-center ${isRTL ? 'justify-end' : 'justify-start'} gap-2`}>
                               {hasAudio && (
                                 <span className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${isPlaying ? 'bg-red-600' : 'bg-white/10 group-hover:bg-red-600'}`}>
                                   {isPlaying ? <Pause size={12} className="text-white" /> : <Play size={12} className="text-white fill-white" />}
@@ -320,9 +296,9 @@ export default function Home() {
                           )}
                           {!isPlaying && hasAudio && <p className="text-xs text-gray-500 mt-1 font-bold">{t('artists.listen')}</p>}
                           {artist.rating && (
-                            <div className="flex items-center justify-end gap-1 mt-2">
+                            <div className={`flex items-center ${isRTL ? 'justify-end' : 'justify-start'} gap-1 mt-2`}>
                               {[1,2,3,4,5].map(s => <Star key={s} size={13} className={s <= Math.round(artist.rating!) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-600'} />)}
-                              <span className="font-black text-sm mr-1">{artist.rating}</span>
+                              <span className="font-black text-sm mx-1">{artist.rating}</span>
                             </div>
                           )}
                         </div>
@@ -333,7 +309,7 @@ export default function Home() {
                             ? <img src={artist.profilePicture || artist.image} alt={artist.name} className="w-full h-full object-cover" />
                             : <div className="w-full h-full flex items-center justify-center text-2xl font-black text-gray-400">{artist.name?.[0]}</div>}
                         </div>
-                        <div className="text-sm font-bold text-gray-300 space-y-1 text-right">
+                        <div className={`text-sm font-bold text-gray-300 space-y-1 ${isRTL ? 'text-right' : 'text-left'}`}>
                           {artist.voiceType && <p>{t('artists.voiceType')}: <span className="text-white">{artist.voiceType}</span></p>}
                           {artist.experience && <p>{t('artists.experience')}: <span className="text-white">{artist.experience}</span></p>}
                         </div>
@@ -364,16 +340,9 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-6">
           <h2 className="text-4xl font-black text-gray-900 mb-16">{t('how.title')}</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            {[
-              { icon: Search, k: 'how.s1' },
-              { icon: MessageSquare, k: 'how.s2' },
-              { icon: Headphones, k: 'how.s3' },
-              { icon: FileCheck, k: 'how.s4' },
-            ].map(({ icon: Icon, k }, i) => (
+            {[{ icon: Search, k: 'how.s1' }, { icon: MessageSquare, k: 'how.s2' }, { icon: Headphones, k: 'how.s3' }, { icon: FileCheck, k: 'how.s4' }].map(({ icon: Icon, k }, i) => (
               <div key={k} className="bg-gray-50 p-6 rounded-3xl border border-gray-100 hover:shadow-lg transition-all group">
-                <div className="w-12 h-12 bg-red-600 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:rotate-12 transition-transform">
-                  <Icon className="text-white" size={24} />
-                </div>
+                <div className="w-12 h-12 bg-red-600 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:rotate-12 transition-transform"><Icon className="text-white" size={24} /></div>
                 <h3 className="text-lg font-black mb-2 text-gray-900">{i + 1}. {t(`${k}.title`)}</h3>
                 <p className="text-gray-500 font-bold text-sm">{t(`${k}.desc`)}</p>
               </div>
@@ -415,7 +384,7 @@ export default function Home() {
                   const popular = packages.find(p => p.popular);
                   const others = packages.filter(p => !p.popular);
                   return popular && others.length >= 2 ? [others[0], popular, ...others.slice(1)] : packages;
-                })().map((plan) => (
+                })().map(plan => (
                   <div key={plan.id} className={`p-8 rounded-3xl border-2 bg-white transition-all relative ${plan.popular ? 'border-red-600 shadow-2xl scale-105' : 'border-gray-100'}`}>
                     {plan.popular && <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-1 rounded-full font-black text-sm">{t('pricing.popular')}</div>}
                     <h3 className="text-xl font-black text-gray-900 mb-1">{plan.name}</h3>
@@ -475,14 +444,11 @@ export default function Home() {
           <h2 className="text-4xl font-black mb-6">{t('cta.title')}</h2>
           <p className="text-gray-400 font-bold mb-10 text-lg">{t('cta.subtitle')}</p>
           <div className="flex flex-wrap justify-center gap-4">
-            {mounted && userRole !== 'visitor' ? (
-              <Link href={userRole === 'client' ? '/client-dashboard' : '/dashboard'} className="bg-red-600 text-white px-10 py-4 rounded-full font-black text-lg hover:bg-red-700 transition-all">{t('cta.dashboard')}</Link>
-            ) : (
-              <>
-                <Link href="/register" className="bg-red-600 text-white px-10 py-4 rounded-full font-black text-lg hover:bg-red-700 transition-all">{t('cta.btn1')}</Link>
-                <Link href="/login" className="bg-white text-gray-900 px-10 py-4 rounded-full font-black text-lg hover:bg-gray-100 transition-all">{t('cta.btn2')}</Link>
-              </>
-            )}
+            {mounted && userRole !== 'visitor'
+              ? <Link href={userRole === 'client' ? '/client-dashboard' : '/dashboard'} className="bg-red-600 text-white px-10 py-4 rounded-full font-black text-lg hover:bg-red-700 transition-all">{t('cta.dashboard')}</Link>
+              : <><Link href="/register" className="bg-red-600 text-white px-10 py-4 rounded-full font-black text-lg hover:bg-red-700 transition-all">{t('cta.btn1')}</Link>
+                  <Link href="/login" className="bg-white text-gray-900 px-10 py-4 rounded-full font-black text-lg hover:bg-gray-100 transition-all">{t('cta.btn2')}</Link></>
+            }
           </div>
         </div>
       </section>
@@ -496,14 +462,11 @@ export default function Home() {
           <a href="#services" className="text-gray-400 hover:text-white font-bold text-sm transition">{t('nav.services')}</a>
           <a href="#contact" className="text-gray-400 hover:text-white font-bold text-sm transition">{t('contact.title')}</a>
           <Link href="/about" className="text-gray-400 hover:text-white font-bold text-sm transition">{t('nav.about')}</Link>
-          {mounted && userRole !== 'visitor' ? (
-            <Link href={userRole === 'client' ? '/client-dashboard' : '/dashboard'} className="text-gray-400 hover:text-white font-bold text-sm transition">{t('nav.dashboard')}</Link>
-          ) : (
-            <>
-              <Link href="/login" className="text-gray-400 hover:text-white font-bold text-sm transition">{t('nav.login')}</Link>
-              <Link href="/register" className="text-gray-400 hover:text-white font-bold text-sm transition">{t('nav.register')}</Link>
-            </>
-          )}
+          {mounted && userRole !== 'visitor'
+            ? <Link href={userRole === 'client' ? '/client-dashboard' : '/dashboard'} className="text-gray-400 hover:text-white font-bold text-sm transition">{t('nav.dashboard')}</Link>
+            : <><Link href="/login" className="text-gray-400 hover:text-white font-bold text-sm transition">{t('nav.login')}</Link>
+                <Link href="/register" className="text-gray-400 hover:text-white font-bold text-sm transition">{t('nav.register')}</Link></>
+          }
         </div>
       </footer>
     </div>
