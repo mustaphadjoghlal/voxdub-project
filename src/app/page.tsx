@@ -2,54 +2,33 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './components/firebase';
 import { useAuth } from './context/AuthContext';
 import {
   Mic2, Play, Pause, Award, Star, Mic,
   Search, MessageSquare, Headphones, FileCheck,
-  CheckCircle2, Bell, User, LogOut, LayoutDashboard, Building2
+  CheckCircle2, Bell, User, LogOut, LayoutDashboard, Building2, Filter
 } from 'lucide-react';
+import ServicesSection from './components/ServicesSection';
+import LanguageToggle from './components/LanguageToggle';
+import { useLang } from './context/LanguageContext';
+import { useSettings } from './context/SettingsContext';
 
-interface AudioSample {
-  name: string;
-  url: string;
-  pendingApproval?: boolean;
-}
-
+interface AudioSample { name: string; url: string; pendingApproval?: boolean; }
 interface Artist {
-  id: string;
-  name: string;
-  role?: string;
-  style?: string;
-  rating?: number;
-  experience?: string;
-  language?: string;
-  image?: string;
-  profilePicture?: string;
-  audioSamples?: AudioSample[] | string[];
-  audio?: string;
-  uid?: string;
-  voiceType?: string;
+  id: string; name: string; role?: string; style?: string; rating?: number;
+  experience?: string; language?: string; image?: string; profilePicture?: string;
+  audioSamples?: AudioSample[] | string[]; audio?: string; uid?: string;
+  voiceType?: string; gender?: string;
 }
-
-interface Partner {
-  id: string;
-  name: string;
-  logo?: string;
-}
-
-interface PackageItem {
-  id: string;
-  name: string;
-  price: string;
-  desc: string;
-  features: string[];
-  popular: boolean;
-}
+interface Partner { id: string; name: string; logo?: string; }
+interface PackageItem { id: string; name: string; price: string; desc: string; features: string[]; popular: boolean; }
 
 export default function Home() {
   const { userRole, mounted, logout } = useAuth();
+  const { settings } = useSettings();
+  const { t, lang } = useLang();
   const [artists, setArtists] = useState<Artist[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [packages, setPackages] = useState<PackageItem[]>([]);
@@ -59,19 +38,24 @@ export default function Home() {
   const [loggedInArtist, setLoggedInArtist] = useState<Artist | null>(null);
   const [loggedInArtistDocId, setLoggedInArtistDocId] = useState<string | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [genderFilter, setGenderFilter] = useState<'all' | 'male' | 'female'>('all');
+  const [visibleCount, setVisibleCount] = useState(6);
+  const [contactName, setContactName] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [contactMessage, setContactMessage] = useState('');
+  const [contactSent, setContactSent] = useState(false);
+  const [contactLoading, setContactLoading] = useState(false);
 
   const getAudioUrl = (artist: Artist): string | null => {
     if (!artist.audioSamples || artist.audioSamples.length === 0) return artist.audio || null;
-    const approved = artist.audioSamples.find((s: any) =>
-      typeof s === 'object' && 'url' in s && !s.pendingApproval
-    );
+    const approved = artist.audioSamples.find((s: any) => typeof s === 'object' && 'url' in s && !s.pendingApproval);
     if (approved && typeof approved === 'object' && 'url' in approved) return (approved as AudioSample).url;
     const first = artist.audioSamples[0];
     if (typeof first === 'string') return first;
     return artist.audio || null;
   };
 
-  // جلب المعلقين
   useEffect(() => {
     const fetchArtists = async () => {
       try {
@@ -80,71 +64,56 @@ export default function Home() {
           .map(doc => ({ id: doc.id, ...doc.data() } as Artist))
           .filter(a => a.name && (a as any).audioSamples?.some((s: any) => !s.pendingApproval));
         setArtists(data);
-      } catch (err) { console.error(err); }
-      finally { setLoadingArtists(false); }
+      } catch (err) { console.error(err); } finally { setLoadingArtists(false); }
     };
     fetchArtists();
   }, []);
 
-  // جلب الشركاء
   useEffect(() => {
-    const fetchPartners = async () => {
-      try {
-        const snapshot = await getDocs(collection(db, 'partners'));
-        setPartners(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Partner)));
-      } catch (err) { console.error(err); }
-    };
-    fetchPartners();
-  }, []);
-
-  // جلب الباقات من Firestore
-  useEffect(() => {
-    const fetchPackages = async () => {
-      try {
-        const snapshot = await getDocs(collection(db, 'packages'));
-        setPackages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PackageItem)));
-      } catch (err) { console.error(err); }
-    };
-    fetchPackages();
+    getDocs(collection(db, 'partners')).then(snap => setPartners(snap.docs.map(d => ({ id: d.id, ...d.data() } as Partner)))).catch(() => {});
+    getDocs(collection(db, 'packages')).then(snap => setPackages(snap.docs.map(d => ({ id: d.id, ...d.data() } as PackageItem)))).catch(() => {});
   }, []);
 
   useEffect(() => {
-    const fetchLoggedInArtist = async () => {
-      if (!mounted) return;
-      if (userRole !== 'artist') { setLoggedInArtist(null); return; }
-      const userId = localStorage.getItem('userId');
-      if (!userId) return;
-      try {
-        const docSnap = await getDoc(doc(db, 'artists', userId));
-        if (docSnap.exists()) {
-          setLoggedInArtist({ id: docSnap.id, ...docSnap.data() } as Artist);
-          setLoggedInArtistDocId(docSnap.id);
-        }
-      } catch (err) { console.error(err); }
-    };
-    fetchLoggedInArtist();
+    if (!mounted || userRole !== 'artist') { setLoggedInArtist(null); return; }
+    const userId = localStorage.getItem('userId');
+    if (!userId) return;
+    getDoc(doc(db, 'artists', userId)).then(snap => {
+      if (snap.exists()) { setLoggedInArtist({ id: snap.id, ...snap.data() } as Artist); setLoggedInArtistDocId(snap.id); }
+    }).catch(() => {});
   }, [userRole, mounted]);
 
   const toggleAudio = (artist: Artist) => {
     const audioUrl = getAudioUrl(artist);
     if (!audioUrl) return;
-    if (playingId === artist.id) {
-      currentAudio?.pause(); setPlayingId(null);
-    } else {
-      if (currentAudio) currentAudio.pause();
-      const newAudio = new Audio(audioUrl);
-      newAudio.play().catch(() => {});
-      setCurrentAudio(newAudio);
-      setPlayingId(artist.id);
-      newAudio.onended = () => setPlayingId(null);
-    }
+    if (playingId === artist.id) { currentAudio?.pause(); setPlayingId(null); return; }
+    if (currentAudio) currentAudio.pause();
+    const audio = new Audio(audioUrl);
+    audio.play().catch(() => {});
+    setCurrentAudio(audio);
+    setPlayingId(artist.id);
+    audio.onended = () => setPlayingId(null);
   };
 
-  const handleLogout = () => {
-    logout(); setShowUserMenu(false); setLoggedInArtist(null);
+  const handleLogout = () => { logout(); setShowUserMenu(false); setLoggedInArtist(null); };
+  const isCurrentArtist = (id: string) => loggedInArtistDocId === id;
+
+  const handleContactSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setContactLoading(true);
+    try {
+      await addDoc(collection(db, 'contacts'), { name: contactName, email: contactEmail, message: contactMessage, createdAt: serverTimestamp() });
+      setContactSent(true);
+      setContactName(''); setContactEmail(''); setContactMessage('');
+    } catch { alert('حدث خطأ، حاول مرة أخرى'); } finally { setContactLoading(false); }
   };
 
-  const isCurrentArtist = (artistId: string) => loggedInArtistDocId === artistId;
+  const filteredArtists = artists.filter(a => {
+    const matchSearch = !searchQuery || a.name?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchGender = genderFilter === 'all' || a.gender === genderFilter;
+    return matchSearch && matchGender;
+  });
+  const visibleArtists = filteredArtists.slice(0, visibleCount);
 
   return (
     <div className="min-h-screen bg-white font-sans text-right" dir="rtl">
@@ -160,16 +129,25 @@ export default function Home() {
       <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-gray-100 h-20 flex items-center">
         <div className="max-w-7xl mx-auto px-6 w-full flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <div className="bg-red-600 p-2 rounded-xl"><Mic2 className="text-white w-5 h-5" /></div>
-            <span className="text-2xl font-black">Vox<span className="text-red-600">Dub</span></span>
+            {settings.logoUrl ? (
+              <img src={settings.logoUrl} alt="VoxDub" className="h-10 w-auto object-contain" />
+            ) : (
+              <>
+                <div className="p-2 rounded-xl" style={{ backgroundColor: settings.primaryColor || '#dc2626' }}>
+                  <Mic2 className="text-white w-5 h-5" />
+                </div>
+                <span className="text-2xl font-black">Vox<span style={{ color: settings.primaryColor || '#dc2626' }}>Dub</span></span>
+              </>
+            )}
           </div>
           <div className="flex items-center gap-3">
+            <a href="#services" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">{t('nav.services')}</a>
+            <Link href="/about" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">{t('nav.about')}</Link>
             <a href="#artists" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">المعلقون</a>
-            <a href="#partners" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">شركاؤنا</a>
             <a href="#pricing" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">الباقات</a>
-            {!mounted ? (
-              <div className="w-32 h-10 bg-gray-100 rounded-full animate-pulse" />
-            ) : (
+            <a href="#contact" className="text-gray-600 font-bold hover:text-red-600 transition hidden md:block">تواصل</a>
+            <LanguageToggle />
+            {!mounted ? <div className="w-32 h-10 bg-gray-100 rounded-full animate-pulse" /> : (
               <>
                 {userRole === 'visitor' && (
                   <>
@@ -179,11 +157,6 @@ export default function Home() {
                 )}
                 {userRole === 'artist' && loggedInArtist && (
                   <div className="flex items-center gap-3">
-                    <span className="text-gray-700 font-black hidden md:block">مرحباً، <span className="text-red-600">{loggedInArtist.name?.split(' ')[0]}</span> 👋</span>
-                    <button className="relative w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition">
-                      <Bell size={18} className="text-gray-600" />
-                      <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-600 rounded-full border-2 border-white" />
-                    </button>
                     <div className="relative">
                       <button onClick={() => setShowUserMenu(!showUserMenu)}
                         className="flex items-center gap-2 bg-gray-900 text-white py-2 px-4 rounded-full font-black text-sm hover:bg-red-600 transition">
@@ -198,58 +171,30 @@ export default function Home() {
                         <div className="absolute left-0 top-14 bg-white rounded-2xl shadow-xl border border-gray-100 w-52 overflow-hidden z-50">
                           <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
                             <p className="font-black text-gray-900 text-sm">{loggedInArtist.name}</p>
-                            <p className="text-gray-400 text-xs font-bold">{loggedInArtist.voiceType || 'معلق صوتي'}</p>
                           </div>
-                          <Link href={`/artists/${loggedInArtistDocId}`} onClick={() => setShowUserMenu(false)}
-                            className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-gray-700 font-bold text-sm">
-                            <User size={16} className="text-red-600" /> ملفي الشخصي
-                          </Link>
-                          <Link href="/dashboard" onClick={() => setShowUserMenu(false)}
-                            className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-gray-700 font-bold text-sm">
-                            <LayoutDashboard size={16} className="text-red-600" /> لوحة التحكم
-                          </Link>
-                          <button onClick={handleLogout}
-                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50 transition text-red-600 font-bold text-sm border-t border-gray-100">
-                            <LogOut size={16} /> تسجيل الخروج
-                          </button>
+                          <Link href={`/artists/${loggedInArtistDocId}`} onClick={() => setShowUserMenu(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-gray-700 font-bold text-sm"><User size={16} className="text-red-600" /> ملفي الشخصي</Link>
+                          <Link href="/dashboard" onClick={() => setShowUserMenu(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-gray-700 font-bold text-sm"><LayoutDashboard size={16} className="text-red-600" /> لوحة التحكم</Link>
+                          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50 transition text-red-600 font-bold text-sm border-t border-gray-100"><LogOut size={16} /> تسجيل الخروج</button>
                         </div>
                       )}
                     </div>
                   </div>
                 )}
                 {userRole === 'client' && (
-                  <div className="flex items-center gap-3">
-                    <button className="relative w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition">
-                      <Bell size={18} className="text-gray-600" />
-                    </button>
-                    <div className="relative">
-                      <button onClick={() => setShowUserMenu(!showUserMenu)}
-                        className="flex items-center gap-2 bg-gray-900 text-white py-2 px-4 rounded-full font-black text-sm hover:bg-red-600 transition">
-                        <User size={16} /> حسابي
-                      </button>
-                      {showUserMenu && (
-                        <div className="absolute left-0 top-14 bg-white rounded-2xl shadow-xl border border-gray-100 w-48 overflow-hidden z-50">
-                          <Link href="/client-dashboard" onClick={() => setShowUserMenu(false)}
-                            className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-gray-700 font-bold text-sm">
-                            <LayoutDashboard size={16} className="text-red-600" /> لوحة التحكم
-                          </Link>
-                          <button onClick={handleLogout}
-                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50 transition text-red-600 font-bold text-sm border-t border-gray-100">
-                            <LogOut size={16} /> تسجيل الخروج
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                  <div className="relative">
+                    <button onClick={() => setShowUserMenu(!showUserMenu)} className="flex items-center gap-2 bg-gray-900 text-white py-2 px-4 rounded-full font-black text-sm hover:bg-red-600 transition"><User size={16} /> حسابي</button>
+                    {showUserMenu && (
+                      <div className="absolute left-0 top-14 bg-white rounded-2xl shadow-xl border border-gray-100 w-48 overflow-hidden z-50">
+                        <Link href="/client-dashboard" onClick={() => setShowUserMenu(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-gray-700 font-bold text-sm"><LayoutDashboard size={16} className="text-red-600" /> لوحة التحكم</Link>
+                        <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50 transition text-red-600 font-bold text-sm border-t border-gray-100"><LogOut size={16} /> تسجيل الخروج</button>
+                      </div>
+                    )}
                   </div>
                 )}
                 {userRole === 'admin' && (
                   <div className="flex items-center gap-3">
-                    <Link href="/dashboard" className="bg-gray-900 text-white font-bold py-2 px-5 rounded-full hover:bg-red-600 transition text-sm flex items-center gap-2">
-                      <LayoutDashboard size={16} /> لوحة المديرة
-                    </Link>
-                    <button onClick={handleLogout} className="text-gray-500 font-bold text-sm hover:text-red-600 transition flex items-center gap-1">
-                      <LogOut size={16} /> خروج
-                    </button>
+                    <Link href="/dashboard" className="bg-gray-900 text-white font-bold py-2 px-5 rounded-full hover:bg-red-600 transition text-sm flex items-center gap-2"><LayoutDashboard size={16} /> لوحة المديرة</Link>
+                    <button onClick={handleLogout} className="text-gray-500 font-bold text-sm hover:text-red-600 transition flex items-center gap-1"><LogOut size={16} /> خروج</button>
                   </div>
                 )}
               </>
@@ -257,35 +202,21 @@ export default function Home() {
           </div>
         </div>
       </nav>
-
       {showUserMenu && <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />}
 
       {/* Hero */}
       <section className="pt-28 pb-40 px-6 text-center bg-white">
         <div className="max-w-4xl mx-auto">
-          <div className="inline-block bg-red-50 text-red-600 font-black px-5 py-2 rounded-full text-sm mb-8 border border-red-100">
-            🎙️ منصة المعلقين الصوتيين الأولى في الجزائر
-          </div>
-          <h1 className="text-6xl md:text-7xl font-black text-gray-900 mb-8 leading-tight">
-            اجعل لمشروعك<br /><span className="text-red-600">صوتاً</span> لا يُنسى
-          </h1>
-          <p className="text-xl text-gray-500 max-w-2xl mx-auto mb-12 leading-relaxed font-bold">
-            نخبة من المعلقين الصوتيين المحترفين بجودة استوديو عالمية.
-          </p>
+          <div className="inline-block bg-red-50 text-red-600 font-black px-5 py-2 rounded-full text-sm mb-8 border border-red-100">🎙️ منصة المعلقين الصوتيين الأولى في الجزائر</div>
+          <h1 className="text-6xl md:text-7xl font-black text-gray-900 mb-8 leading-tight">اجعل لمشروعك<br /><span className="text-red-600">صوتاً</span> لا يُنسى</h1>
+          <p className="text-xl text-gray-500 max-w-2xl mx-auto mb-12 leading-relaxed font-bold">نخبة من المعلقين الصوتيين المحترفين بجودة استوديو عالمية.</p>
           <div className="flex flex-wrap justify-center gap-4">
             <a href="#artists" className="bg-gray-900 text-white px-10 py-4 rounded-full font-black text-lg hover:bg-red-600 transition-all">اكتشف المعلقين</a>
-            {mounted && userRole === 'visitor' && (
-              <Link href="/register" className="bg-white text-gray-900 border-2 border-gray-200 px-10 py-4 rounded-full font-black text-lg hover:border-red-600 hover:text-red-600 transition-all">
-                انضم إلينا
-              </Link>
-            )}
+            {mounted && userRole === 'visitor' && <Link href="/register" className="bg-white text-gray-900 border-2 border-gray-200 px-10 py-4 rounded-full font-black text-lg hover:border-red-600 hover:text-red-600 transition-all">انضم إلينا</Link>}
           </div>
           <div className="mt-16 flex justify-center gap-12 text-center">
             {[['50+', 'معلق محترف'], ['500+', 'مشروع منجز'], ['100%', 'رضا العملاء']].map(([num, label]) => (
-              <div key={label}>
-                <div className="text-3xl font-black text-gray-900">{num}</div>
-                <div className="text-gray-500 font-bold text-sm">{label}</div>
-              </div>
+              <div key={label}><div className="text-3xl font-black text-gray-900">{num}</div><div className="text-gray-500 font-bold text-sm">{label}</div></div>
             ))}
           </div>
         </div>
@@ -296,15 +227,9 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-6">
           <h2 className="text-4xl font-black mb-16">لماذا <span className="text-red-500">VoxDub</span>؟</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[
-              { icon: Mic, title: 'أصوات متنوعة', desc: 'أكثر من 50 معلق صوتي محترف بأساليب وأصوات متنوعة' },
-              { icon: Headphones, title: 'جودة عالية', desc: 'تسجيلات بجودة استوديو احترافية مع ضمان الجودة' },
-              { icon: FileCheck, title: 'خدمات شاملة', desc: 'باقات متكاملة تشمل الكتابة والتدقيق اللغوي' },
-            ].map(({ icon: Icon, title, desc }) => (
+            {[{ icon: Mic, title: 'أصوات متنوعة', desc: 'أكثر من 50 معلق صوتي محترف' }, { icon: Headphones, title: 'جودة عالية', desc: 'تسجيلات بجودة استوديو احترافية' }, { icon: FileCheck, title: 'خدمات شاملة', desc: 'باقات متكاملة تشمل الكتابة والتدقيق' }].map(({ icon: Icon, title, desc }) => (
               <div key={title} className="bg-white/5 p-8 rounded-3xl border border-white/10">
-                <div className="w-16 h-16 bg-red-600/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                  <Icon size={32} className="text-red-500" />
-                </div>
+                <div className="w-16 h-16 bg-red-600/20 rounded-2xl flex items-center justify-center mx-auto mb-6"><Icon size={32} className="text-red-500" /></div>
                 <h3 className="text-2xl font-black mb-3">{title}</h3>
                 <p className="text-gray-400 font-bold leading-relaxed">{desc}</p>
               </div>
@@ -313,87 +238,103 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Artists */}
+      {/* Artists — with search, filter, pagination */}
       <section id="artists" className="py-24 bg-gray-50">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="text-center mb-16">
+          <div className="text-center mb-12">
             <h2 className="text-4xl font-black text-gray-900 mb-4">معلقونا الصوتيون</h2>
             <p className="text-gray-500 font-bold text-lg">اضغط على اسم المعلق لسماع عينته الصوتية</p>
           </div>
+
+          {/* Search & Filter */}
+          <div className="flex flex-wrap items-center gap-3 mb-10 justify-center">
+            <div className="relative">
+              <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => { setSearchQuery(e.target.value); setVisibleCount(6); }}
+                placeholder={t('artists.search')}
+                className="pr-9 pl-4 py-3 rounded-2xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition w-64"
+              />
+            </div>
+            <div className="flex gap-2">
+              {(['all', 'male', 'female'] as const).map(g => (
+                <button key={g}
+                  onClick={() => { setGenderFilter(g); setVisibleCount(6); }}
+                  className={`px-4 py-2.5 rounded-xl font-black text-sm transition-all ${genderFilter === g ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-400'}`}>
+                  {g === 'all' ? t('artists.filterAll') : g === 'male' ? t('artists.filterMale') : t('artists.filterFemale')}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {loadingArtists ? (
             <div className="text-center py-20 text-gray-400 font-bold">جاري تحميل المعلقين...</div>
-          ) : artists.length === 0 ? (
-            <div className="text-center py-20 text-gray-400 font-bold">لا يوجد معلقون حالياً</div>
+          ) : filteredArtists.length === 0 ? (
+            <div className="text-center py-20 text-gray-400 font-bold">{t('artists.noResults')}</div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {artists.map((artist) => {
-                const audioUrl = getAudioUrl(artist);
-                const hasAudio = !!audioUrl;
-                const isPlaying = playingId === artist.id;
-                const isMine = isCurrentArtist(artist.id);
-                return (
-                  <div key={artist.id} className={`rounded-3xl p-8 text-white hover:-translate-y-2 transition-transform duration-300 relative ${isMine ? 'bg-red-700 ring-4 ring-red-400' : 'bg-gray-900'}`}>
-                    {isMine && (
-                      <div className="absolute -top-3 -right-3 bg-red-500 text-white text-xs font-black px-3 py-1 rounded-full border-2 border-white shadow-lg">ملفك الشخصي ✨</div>
-                    )}
-                    <div className="flex justify-between items-start mb-6">
-                      <Award size={22} className={`${isMine ? 'text-yellow-300' : 'text-red-400'} opacity-60 flex-shrink-0`} />
-                      <div className="text-right flex-1 mr-3">
-                        <button onClick={() => toggleAudio(artist)} disabled={!hasAudio}
-                          className={`text-right w-full group ${hasAudio ? 'cursor-pointer' : 'cursor-default'}`}>
-                          <div className="flex items-center justify-end gap-2">
-                            {hasAudio && (
-                              <span className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${isPlaying ? 'bg-red-600' : 'bg-white/10 group-hover:bg-red-600'}`}>
-                                {isPlaying ? <Pause size={12} className="text-white" /> : <Play size={12} className="text-white fill-white" />}
-                              </span>
-                            )}
-                            <h3 className={`text-2xl font-black transition-colors ${hasAudio ? 'group-hover:text-red-400' : ''} ${isPlaying ? 'text-red-400' : 'text-white'}`}>
-                              {artist.name}
-                            </h3>
-                          </div>
-                          {hasAudio && <p className="text-xs text-gray-500 mt-1 font-bold">{isPlaying ? '▶ جاري التشغيل...' : 'اضغط للاستماع'}</p>}
-                        </button>
-                        <p className="text-gray-400 font-bold mt-2 text-sm">{artist.role || artist.style || ''}</p>
-                        {artist.rating && (
-                          <div className="flex items-center justify-end gap-1 mt-2">
-                            <span className="font-black text-sm">{artist.rating}</span>
-                            <Star size={13} className="fill-yellow-400 text-yellow-400" />
-                          </div>
-                        )}
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {visibleArtists.map((artist) => {
+                  const audioUrl = getAudioUrl(artist);
+                  const hasAudio = !!audioUrl;
+                  const isPlaying = playingId === artist.id;
+                  const isMine = isCurrentArtist(artist.id);
+                  return (
+                    <div key={artist.id} className={`rounded-3xl p-8 text-white hover:-translate-y-2 transition-transform duration-300 relative ${isMine ? 'bg-red-700 ring-4 ring-red-400' : 'bg-gray-900'}`}>
+                      {isMine && <div className="absolute -top-3 -right-3 bg-red-500 text-white text-xs font-black px-3 py-1 rounded-full border-2 border-white shadow-lg">ملفك ✨</div>}
+                      <div className="flex justify-between items-start mb-6">
+                        <Award size={22} className={`${isMine ? 'text-yellow-300' : 'text-red-400'} opacity-60 flex-shrink-0`} />
+                        <div className="text-right flex-1 mr-3">
+                          <button onClick={() => toggleAudio(artist)} disabled={!hasAudio} className={`text-right w-full group ${hasAudio ? 'cursor-pointer' : 'cursor-default'}`}>
+                            <div className="flex items-center justify-end gap-2">
+                              {hasAudio && (
+                                <span className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${isPlaying ? 'bg-red-600' : 'bg-white/10 group-hover:bg-red-600'}`}>
+                                  {isPlaying ? <Pause size={12} className="text-white" /> : <Play size={12} className="text-white fill-white" />}
+                                </span>
+                              )}
+                              <h3 className={`text-2xl font-black ${isPlaying ? 'text-red-400' : 'text-white'}`}>{artist.name}</h3>
+                            </div>
+                            {hasAudio && <p className="text-xs text-gray-500 mt-1 font-bold">{isPlaying ? '▶ جاري التشغيل...' : 'اضغط للاستماع'}</p>}
+                          </button>
+                          {artist.rating && (
+                            <div className="flex items-center justify-end gap-1 mt-2">
+                              {[1,2,3,4,5].map(s => <Star key={s} size={13} className={s <= Math.round(artist.rating!) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-600'} />)}
+                              <span className="font-black text-sm mr-1">{artist.rating}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-4 bg-white/5 p-4 rounded-2xl mb-6 border border-white/10">
-                      <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-700 flex-shrink-0">
-                        {(artist.profilePicture || artist.image)
-                          ? <img src={artist.profilePicture || artist.image} alt={artist.name} className="w-full h-full object-cover" />
-                          : <div className="w-full h-full flex items-center justify-center text-2xl font-black text-gray-400">{artist.name?.[0] || '?'}</div>}
+                      <div className="flex items-center gap-4 bg-white/5 p-4 rounded-2xl mb-6 border border-white/10">
+                        <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-700 flex-shrink-0">
+                          {(artist.profilePicture || artist.image)
+                            ? <img src={artist.profilePicture || artist.image} alt={artist.name} className="w-full h-full object-cover" />
+                            : <div className="w-full h-full flex items-center justify-center text-2xl font-black text-gray-400">{artist.name?.[0]}</div>}
+                        </div>
+                        <div className="text-sm font-bold text-gray-300 space-y-1 text-right">
+                          {artist.voiceType && <p>النوع: <span className="text-white">{artist.voiceType}</span></p>}
+                          {artist.experience && <p>الخبرة: <span className="text-white">{artist.experience}</span></p>}
+                        </div>
                       </div>
-                      <div className="text-sm font-bold text-gray-300 space-y-1 text-right">
-                        {artist.experience && <p>الخبرة: <span className="text-white">{artist.experience}</span></p>}
-                        {artist.language && <p>اللغة: <span className="text-white">{artist.language}</span></p>}
-                      </div>
-                    </div>
-                    {isMine ? (
                       <Link href={`/artists/${artist.id}`}
-                        className="w-full py-3 rounded-2xl font-bold text-center block bg-white text-red-700 hover:bg-red-50 transition-all text-sm">
-                        عرض ملفي الشخصي ←
-                      </Link>
-                    ) : (
-                      <Link href={`/artists/${artist.id}`}
-                        className="w-full py-3 rounded-2xl font-bold text-center block border border-white/20 text-gray-300 hover:bg-white hover:text-gray-900 transition-all text-sm">
+                        className={`w-full py-3 rounded-2xl font-bold text-center block transition-all text-sm ${isMine ? 'bg-white text-red-700 hover:bg-red-50' : 'border border-white/20 text-gray-300 hover:bg-white hover:text-gray-900'}`}>
                         الملف الشخصي
                       </Link>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {visibleCount < filteredArtists.length && (
+                <div className="text-center mt-10">
+                  <button onClick={() => setVisibleCount(v => v + 6)}
+                    className="bg-gray-900 text-white px-10 py-4 rounded-full font-black text-lg hover:bg-red-600 transition-all">
+                    {t('artists.loadMore')} ({filteredArtists.length - visibleCount} متبقٍ)
+                  </button>
+                </div>
+              )}
+            </>
           )}
-          <div className="text-center mt-12">
-            <Link href="/artists" className="bg-gray-900 text-white px-10 py-4 rounded-full font-black text-lg hover:bg-red-600 transition-all inline-block">
-              عرض جميع المعلقين
-            </Link>
-          </div>
         </div>
       </section>
 
@@ -402,16 +343,9 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-6">
           <h2 className="text-4xl font-black text-gray-900 mb-16">كيف <span className="text-red-600">نعمل؟</span></h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            {[
-              { icon: Search, t: 'اكتشف', d: 'اختر الصوت المناسب لمشروعك' },
-              { icon: MessageSquare, t: 'تواصل', d: 'أرسل تفاصيل مشروعك والنص' },
-              { icon: Headphones, t: 'تنفيذ', d: 'نسجل العمل بأحدث التقنيات' },
-              { icon: FileCheck, t: 'استلام', d: 'استلم ملفك بجودة احترافية' },
-            ].map((step, i) => (
+            {[{ icon: Search, t: 'اكتشف', d: 'اختر الصوت المناسب' }, { icon: MessageSquare, t: 'تواصل', d: 'أرسل تفاصيل مشروعك' }, { icon: Headphones, t: 'تنفيذ', d: 'نسجل بأحدث التقنيات' }, { icon: FileCheck, t: 'استلام', d: 'استلم ملفك باحترافية' }].map((step, i) => (
               <div key={i} className="bg-gray-50 p-6 rounded-3xl border border-gray-100 hover:shadow-lg transition-all group">
-                <div className="w-12 h-12 bg-red-600 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:rotate-12 transition-transform">
-                  <step.icon className="text-white" size={24} />
-                </div>
+                <div className="w-12 h-12 bg-red-600 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:rotate-12 transition-transform"><step.icon className="text-white" size={24} /></div>
                 <h3 className="text-lg font-black mb-2 text-gray-900">{i + 1}. {step.t}</h3>
                 <p className="text-gray-500 font-bold text-sm">{step.d}</p>
               </div>
@@ -420,23 +354,19 @@ export default function Home() {
         </div>
       </section>
 
-      {/* شركاؤنا */}
+      <ServicesSection />
+
+      {/* Partners */}
       {partners.length > 0 && (
         <section id="partners" className="py-20 bg-gray-50 overflow-hidden">
           <div className="max-w-6xl mx-auto px-6 text-center mb-12">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <Building2 size={28} className="text-red-600" />
-              <h2 className="text-4xl font-black text-gray-900">شركاؤنا</h2>
-            </div>
-            <p className="text-gray-500 font-bold">مؤسسات وشركات وثقت بأصواتنا</p>
+            <div className="flex items-center justify-center gap-3 mb-4"><Building2 size={28} className="text-red-600" /><h2 className="text-4xl font-black text-gray-900">شركاؤنا</h2></div>
           </div>
           <div className="relative">
             <div className="flex animate-marquee gap-8 w-max">
               {[...partners, ...partners].map((partner, i) => (
-                <div key={i} className="flex-shrink-0 bg-white rounded-2xl px-8 py-6 shadow-sm border border-gray-100 flex flex-col items-center gap-3 min-w-[180px] hover:shadow-md hover:border-red-100 transition-all">
-                  {partner.logo
-                    ? <img src={partner.logo} alt={partner.name} className="w-16 h-16 object-contain rounded-xl" />
-                    : <div className="w-16 h-16 bg-red-50 rounded-xl flex items-center justify-center"><Building2 size={28} className="text-red-400" /></div>}
+                <div key={i} className="flex-shrink-0 bg-white rounded-2xl px-8 py-6 shadow-sm border border-gray-100 flex flex-col items-center gap-3 min-w-[180px]">
+                  {partner.logo ? <img src={partner.logo} alt={partner.name} className="w-16 h-16 object-contain rounded-xl" /> : <div className="w-16 h-16 bg-red-50 rounded-xl flex items-center justify-center"><Building2 size={28} className="text-red-400" /></div>}
                   <p className="font-black text-gray-800 text-sm text-center">{partner.name}</p>
                 </div>
               ))}
@@ -445,32 +375,23 @@ export default function Home() {
         </section>
       )}
 
-      {/* Pricing — يُجلب من Firestore */}
+      {/* Pricing */}
       <section id="pricing" className="py-24 bg-white">
         <div className="max-w-6xl mx-auto px-6 text-center">
           <h2 className="text-4xl font-black text-gray-900 mb-16">باقاتنا</h2>
-          {packages.length === 0 ? (
-            <p className="text-gray-400 font-bold py-12">جاري تحميل الباقات...</p>
-          ) : (
+          {packages.length === 0 ? <p className="text-gray-400 font-bold py-12">جاري تحميل الباقات...</p> : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-right">
-              {packages.map((plan) => (
+              {((): typeof packages => {
+                const popular = packages.find(p => p.popular);
+                const others = packages.filter(p => !p.popular);
+                return popular && others.length >= 2 ? [others[0], popular, ...others.slice(1)] : packages;
+              })().map((plan) => (
                 <div key={plan.id} className={`p-8 rounded-3xl border-2 bg-white transition-all relative ${plan.popular ? 'border-red-600 shadow-2xl scale-105' : 'border-gray-100'}`}>
-                  {plan.popular && (
-                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-1 rounded-full font-black text-sm">الأكثر طلباً</div>
-                  )}
+                  {plan.popular && <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-1 rounded-full font-black text-sm">{t('pricing.popular')}</div>}
                   <h3 className="text-xl font-black text-gray-900 mb-1">{plan.name}</h3>
                   <p className="text-gray-400 font-bold text-sm mb-6">{plan.desc}</p>
-                  <div className="mb-8">
-                    <span className="text-4xl font-black text-red-600">{plan.price}</span>
-                    <span className="text-gray-400 font-bold text-xs mr-2">دينار</span>
-                  </div>
-                  <ul className="space-y-3 mb-8">
-                    {plan.features?.map((f, j) => (
-                      <li key={j} className="flex items-center gap-2 text-sm font-bold text-gray-600">
-                        <CheckCircle2 size={16} className="text-red-600 flex-shrink-0" />{f}
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="mb-8"><span className="text-4xl font-black text-red-600">{plan.price}</span><span className="text-gray-400 font-bold text-xs mr-2">دينار</span></div>
+                  <ul className="space-y-3 mb-8">{plan.features?.map((f, j) => <li key={j} className="flex items-center gap-2 text-sm font-bold text-gray-600"><CheckCircle2 size={16} className="text-red-600 flex-shrink-0" />{f}</li>)}</ul>
                   <Link href={mounted && userRole !== 'visitor' ? '/client-dashboard' : '/register'}
                     className={`w-full py-3 rounded-2xl block text-center font-black transition-all ${plan.popular ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-gray-900 text-white hover:bg-gray-700'}`}>
                     ابدأ الآن
@@ -482,17 +403,53 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Contact Form */}
+      <section id="contact" className="py-24 bg-gray-50">
+        <div className="max-w-2xl mx-auto px-6">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl font-black text-gray-900 mb-4">{t('contact.title')}</h2>
+            <p className="text-gray-500 font-bold">نحن هنا للإجابة على جميع استفساراتك</p>
+          </div>
+          {contactSent ? (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-10 text-center">
+              <div className="text-5xl mb-4">✅</div>
+              <p className="text-emerald-700 font-black text-lg">{t('contact.success')}</p>
+              <button onClick={() => setContactSent(false)} className="mt-6 text-emerald-600 font-bold underline">إرسال رسالة أخرى</button>
+            </div>
+          ) : (
+            <form onSubmit={handleContactSubmit} className="bg-white rounded-3xl p-10 shadow-sm border border-gray-100 space-y-5">
+              <div>
+                <label className="block text-sm font-black text-gray-700 mb-2">{t('contact.name')} *</label>
+                <input value={contactName} onChange={e => setContactName(e.target.value)} required
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition" />
+              </div>
+              <div>
+                <label className="block text-sm font-black text-gray-700 mb-2">{t('contact.email')} *</label>
+                <input type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} required
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition" />
+              </div>
+              <div>
+                <label className="block text-sm font-black text-gray-700 mb-2">{t('contact.message')} *</label>
+                <textarea value={contactMessage} onChange={e => setContactMessage(e.target.value)} required rows={5}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition resize-none" />
+              </div>
+              <button type="submit" disabled={contactLoading}
+                className="w-full bg-red-600 text-white py-4 rounded-2xl font-black text-base hover:bg-red-700 disabled:opacity-50 transition">
+                {contactLoading ? 'جاري الإرسال...' : t('contact.send')}
+              </button>
+            </form>
+          )}
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="py-24 bg-gray-900 mx-4 rounded-3xl text-center text-white mb-8">
         <div className="max-w-2xl mx-auto px-6">
           <h2 className="text-4xl font-black mb-6">هل أنت مستعد؟</h2>
-          <p className="text-gray-400 font-bold mb-10 text-lg">انضم إلى VoxDub اليوم — سواء كنت معلقاً صوتياً أو صاحب مشروع</p>
+          <p className="text-gray-400 font-bold mb-10 text-lg">انضم إلى VoxDub اليوم</p>
           <div className="flex flex-wrap justify-center gap-4">
             {mounted && userRole !== 'visitor' ? (
-              <Link href={userRole === 'client' ? '/client-dashboard' : '/dashboard'}
-                className="bg-red-600 text-white px-10 py-4 rounded-full font-black text-lg hover:bg-red-700 transition-all">
-                اذهب إلى لوحة التحكم
-              </Link>
+              <Link href={userRole === 'client' ? '/client-dashboard' : '/dashboard'} className="bg-red-600 text-white px-10 py-4 rounded-full font-black text-lg hover:bg-red-700 transition-all">اذهب إلى لوحة التحكم</Link>
             ) : (
               <>
                 <Link href="/register" className="bg-red-600 text-white px-10 py-4 rounded-full font-black text-lg hover:bg-red-700 transition-all">انضم إلينا</Link>
@@ -507,12 +464,13 @@ export default function Home() {
       <footer className="bg-gray-950 text-white py-16 text-center rounded-t-3xl">
         <div className="text-3xl font-black mb-4">Vox<span className="text-red-500">Dub</span></div>
         <p className="text-gray-500 font-bold text-sm">إدارة وتأسيس: لميس حميمي © 2026 — جميع الحقوق محفوظة</p>
-        <div className="flex justify-center gap-8 mt-8">
+        <div className="flex justify-center gap-8 mt-8 flex-wrap">
           <a href="#artists" className="text-gray-400 hover:text-white font-bold text-sm transition">المعلقون</a>
-          <a href="#partners" className="text-gray-400 hover:text-white font-bold text-sm transition">شركاؤنا</a>
+          <a href="#services" className="text-gray-400 hover:text-white font-bold text-sm transition">الخدمات</a>
+          <a href="#contact" className="text-gray-400 hover:text-white font-bold text-sm transition">تواصل</a>
+          <Link href="/about" className="text-gray-400 hover:text-white font-bold text-sm transition">{t('nav.about')}</Link>
           {mounted && userRole !== 'visitor' ? (
-            <Link href={userRole === 'client' ? '/client-dashboard' : '/dashboard'}
-              className="text-gray-400 hover:text-white font-bold text-sm transition">لوحة التحكم</Link>
+            <Link href={userRole === 'client' ? '/client-dashboard' : '/dashboard'} className="text-gray-400 hover:text-white font-bold text-sm transition">لوحة التحكم</Link>
           ) : (
             <>
               <Link href="/login" className="text-gray-400 hover:text-white font-bold text-sm transition">تسجيل الدخول</Link>
