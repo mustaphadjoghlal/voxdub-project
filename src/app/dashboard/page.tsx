@@ -15,8 +15,11 @@ import {
   Bell, CheckCircle, Check, X, Trash2, Edit3, Save, Star,
   MessageSquare, Mic, Package, Sparkles, Camera, BarChart3, Heart,
   TrendingUp, Building2, UserCheck, Phone, Mail, Briefcase, Tag,
-  Send, Download
+  Send, Download, Settings
 } from 'lucide-react';
+
+import AdminSettingsTab from '../components/AdminSettingsTab';
+import AdminServicesTab from '../components/AdminServicesTab';
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   pending:     { label: 'في الانتظار',     color: 'bg-amber-100 text-amber-700' },
@@ -34,7 +37,7 @@ const statusOptions = [
   { value: 'completed',   label: 'مكتمل' },
 ];
 
-type TabType = 'overview' | 'audio' | 'profile' | 'reviews' | 'notifications' | 'artists' | 'orders' | 'stats' | 'partners' | 'clients' | 'packages';
+type TabType = 'overview' | 'audio' | 'profile' | 'reviews' | 'notifications' | 'artists' | 'orders' | 'stats' | 'partners' | 'clients' | 'packages' | 'settings' | 'services-mgmt';
 
 const Dashboard = () => {
   const { logout } = useAuth();
@@ -353,7 +356,23 @@ const Dashboard = () => {
   };
 
   const handleStatusChange = async (orderId: string, newStatus: string) => {
-    try { await updateDoc(doc(db, 'orders', orderId), { status: newStatus }); setAllOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o)); } catch (err) { console.error(err); }
+    try {
+      await updateDoc(doc(db, 'orders', orderId), { status: newStatus });
+      setAllOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+      const order = allOrders.find(o => o.id === orderId);
+      if (order) {
+        await addDoc(collection(db, 'notifications'), {
+          artistId: `client_${order.email || order.clientName || ''}`,
+          clientEmail: order.email || '',
+          title: '📦 تحديث حالة طلبك',
+          body: `تم تحديث حالة طلب "${order.selectedPackage}" إلى "${statusConfig[newStatus]?.label || newStatus}"`,
+          type: 'order_status_update',
+          orderId,
+          read: false,
+          createdAt: serverTimestamp(),
+        });
+      }
+    } catch (err) { console.error(err); }
   };
 
   const handleLogout = async () => { await logout(); router.push('/login'); };
@@ -436,7 +455,9 @@ const Dashboard = () => {
               { key: 'stats',         label: 'الإحصائيات', icon: BarChart3 },
               { key: 'packages',      label: 'الباقات',    icon: Tag },
               { key: 'partners',      label: 'الشركاء',    icon: Building2 },
-              { key: 'notifications', label: 'الإشعارات',  icon: Bell },
+              { key: 'services-mgmt', label: 'الخدمات',    icon: Mic2 },
+                { key: 'settings',      label: 'الإعدادات',  icon: Settings },
+                { key: 'notifications', label: 'الإشعارات',  icon: Bell },
             ].map(tab => (
               <button key={tab.key} onClick={() => setActiveTab(tab.key as TabType)}
                 className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-sm transition-all whitespace-nowrap ${activeTab === tab.key ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-900'}`}>
@@ -889,6 +910,20 @@ const Dashboard = () => {
             </div>
           )}
 
+          {/* ===== تبويب الخدمات ===== */}
+            {activeTab === 'services-mgmt' && (
+              <div className="space-y-6">
+                <AdminServicesTab />
+              </div>
+            )}
+
+            {/* ===== تبويب الإعدادات ===== */}
+            {activeTab === 'settings' && (
+              <div className="space-y-6">
+                <AdminSettingsTab />
+              </div>
+            )}
+
           {/* ===== تبويب الإشعارات ===== */}
           {activeTab === 'notifications' && (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -1245,5 +1280,3 @@ const Dashboard = () => {
     </div>
   );
 };
-
-export default Dashboard;
