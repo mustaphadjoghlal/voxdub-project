@@ -1122,11 +1122,13 @@ const Dashboard = () => {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className={`px-3 py-1 rounded-full text-xs font-black ${status.color}`}>{status.label}</span>
-                          <button
-                            onClick={() => { setChatOrderId(order.id); setChatOrderLabel(`${order.selectedPackage} — ${order.clientName}`); }}
-                            className="w-8 h-8 bg-red-600/20 rounded-lg flex items-center justify-center hover:bg-red-600 transition group">
-                            <MessageSquare size={14} className="text-red-400 group-hover:text-white" />
-                          </button>
+                          {order.status !== 'pending' && (
+                            <button
+                              onClick={() => { setChatOrderId(order.id); setChatOrderLabel(`${order.selectedPackage} — ${order.clientName}`); }}
+                              className="w-8 h-8 bg-red-600/20 rounded-lg flex items-center justify-center hover:bg-red-600 transition group">
+                              <MessageSquare size={14} className="text-red-400 group-hover:text-white" />
+                            </button>
+                          )}
                           <Eye size={14} className="text-gray-500 cursor-pointer" onClick={() => setSelectedArtistOrder(order)} />
                         </div>
                       </div>
@@ -1347,6 +1349,7 @@ const Dashboard = () => {
           currentUserName={artist.name}
           currentUserRole="artist"
           orderLabel={chatOrderLabel}
+          readOnly={artistOrders.find((o: any) => o.id === chatOrderId)?.status === 'completed'}
           onClose={() => setChatOrderId(null)}
         />
       )}

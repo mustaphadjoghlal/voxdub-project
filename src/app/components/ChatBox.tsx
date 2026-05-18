@@ -6,7 +6,7 @@ import {
   orderBy, serverTimestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Send, Shield, X, MessageSquare } from 'lucide-react';
+import { Send, Shield, X, MessageSquare, CheckCircle } from 'lucide-react';
 
 // ── Patterns that reveal contact info outside the platform ──────────────────
 const BLOCKED_PATTERNS: RegExp[] = [
@@ -37,11 +37,12 @@ interface Props {
   currentUserName: string;
   currentUserRole: 'client' | 'artist';
   orderLabel?: string;
+  readOnly?: boolean;
   onClose: () => void;
 }
 
 export default function ChatBox({
-  orderId, currentUserId, currentUserName, currentUserRole, orderLabel, onClose,
+  orderId, currentUserId, currentUserName, currentUserRole, orderLabel, readOnly = false, onClose,
 }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
@@ -169,25 +170,34 @@ export default function ChatBox({
           </div>
         )}
 
-        {/* Input */}
-        <div className="bg-white border-t border-gray-100 px-4 py-3 flex items-end gap-3 flex-shrink-0">
-          <textarea
-            value={text}
-            onChange={e => setText(e.target.value)}
-            onKeyDown={handleKey}
-            rows={1}
-            placeholder="اكتب رسالتك..."
-            className="flex-1 resize-none px-4 py-2.5 rounded-2xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition max-h-28 overflow-y-auto"
-            style={{ lineHeight: '1.5' }}
-          />
-          <button
-            onClick={handleSend}
-            disabled={sending || !text.trim()}
-            className="w-10 h-10 bg-red-600 rounded-2xl flex items-center justify-center hover:bg-red-700 disabled:bg-gray-200 transition flex-shrink-0"
-          >
-            <Send size={16} className={sending || !text.trim() ? 'text-gray-400' : 'text-white'} />
-          </button>
-        </div>
+        {/* Input or Read-only notice */}
+        {readOnly ? (
+          <div className="bg-emerald-50 border-t border-emerald-100 px-4 py-3 flex items-center gap-2 flex-shrink-0">
+            <CheckCircle size={16} className="text-emerald-500 flex-shrink-0" />
+            <p className="text-emerald-700 font-bold text-sm">
+              الطلب مكتمل — المحادثة محفوظة للمراجعة فقط
+            </p>
+          </div>
+        ) : (
+          <div className="bg-white border-t border-gray-100 px-4 py-3 flex items-end gap-3 flex-shrink-0">
+            <textarea
+              value={text}
+              onChange={e => setText(e.target.value)}
+              onKeyDown={handleKey}
+              rows={1}
+              placeholder="اكتب رسالتك..."
+              className="flex-1 resize-none px-4 py-2.5 rounded-2xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition max-h-28 overflow-y-auto"
+              style={{ lineHeight: '1.5' }}
+            />
+            <button
+              onClick={handleSend}
+              disabled={sending || !text.trim()}
+              className="w-10 h-10 bg-red-600 rounded-2xl flex items-center justify-center hover:bg-red-700 disabled:bg-gray-200 transition flex-shrink-0"
+            >
+              <Send size={16} className={sending || !text.trim() ? 'text-gray-400' : 'text-white'} />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

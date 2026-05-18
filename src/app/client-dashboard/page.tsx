@@ -10,7 +10,7 @@ import Link from 'next/link';
 import {
   Mic2, LogOut, Plus, Clock, CheckCircle,
   PlayCircle, AlertCircle, FileText, X, Tag,
-  Eye, Download, MessageSquare, Send, Bell
+  Eye, Download, MessageSquare, Send, Bell, ThumbsUp
 } from 'lucide-react';
 import ChatBox from '../components/ChatBox';
 
@@ -205,6 +205,32 @@ export default function ClientDashboard() {
     setSendingFeedback(false);
   };
 
+  const handleCompleteOrder = async (order: Order) => {
+    if (!confirm(`هل تؤكد أن العمل "  ${order.selectedPackage}" قد اكتمل وأنت راضٍ عنه؟\n\nملاحظة: بعد التأكيد لن تتمكن من تعديل حالة هذا الطلب.`)) return;
+    try {
+      await updateDoc(doc(db, 'orders', order.id), { status: 'completed' });
+      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'completed' } : o));
+      // Notify artist
+      const artistQ = query(collection(db, 'artists'), where('name', '==', order.selectedVoiceActor));
+      const artistSnap = await getDocs(artistQ).catch(() => null);
+      if (artistSnap && !artistSnap.empty) {
+        await addDoc(collection(db, 'notifications'), {
+          artistId: artistSnap.docs[0].id,
+          title: '🎉 أكّد العميل اكتمال الطلب!',
+          body: `${userName} أكّد رسمياً اكتمال "${order.selectedPackage}" — شكراً على عملك!`,
+          type: 'order_completed', read: false, createdAt: serverTimestamp(),
+        });
+      }
+      // Notify admin
+      await addDoc(collection(db, 'notifications'), {
+        artistId: 'admin',
+        title: '✅ طلب مكتمل من طرف العميل',
+        body: `${userName} أكّد اكتمال "${order.selectedPackage}" — المعلق: ${order.selectedVoiceActor}`,
+        type: 'order_completed', read: false, createdAt: serverTimestamp(),
+      });
+    } catch { alert('حدث خطأ، حاول مجدداً.'); }
+  };
+
   const handleLogout = async () => { await logout(); router.push('/login'); };
 
   if (!mounted || loading) {
@@ -333,17 +359,26 @@ export default function ClientDashboard() {
                       <p className="text-gray-500 font-bold text-sm mb-1">نوع العمل: <span className="text-gray-700">{order.workType}</span></p>
                       {order.description && <p className="text-gray-400 font-bold text-xs mt-2 line-clamp-2">{order.description}</p>}
                     </div>
-                    <div className="flex gap-2 flex-shrink-0">
+                    <div className="flex gap-2 flex-shrink-0 flex-wrap justify-end">
                       <button
                         onClick={() => { setSelectedOrder(order); setFeedbackSent(false); }}
                         className="flex items-center gap-2 bg-gray-100 text-gray-700 px-4 py-2 rounded-full font-black text-xs hover:bg-gray-200 transition">
                         <Eye size={14} /> التفاصيل
                       </button>
-                      <button
-                        onClick={() => { setChatOrderId(order.id); setChatOrderLabel(`${order.selectedPackage} — ${order.selectedVoiceActor}`); }}
-                        className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-full font-black text-xs hover:bg-red-700 transition">
-                        <MessageSquare size={14} /> دردشة
-                      </button>
+                      {order.status !== 'pending' && (
+                        <button
+                          onClick={() => { setChatOrderId(order.id); setChatOrderLabel(`${order.selectedPackage} — ${order.selectedVoiceActor}`); }}
+                          className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-full font-black text-xs hover:bg-red-700 transition">
+                          <MessageSquare size={14} /> دردشة
+                        </button>
+                      )}
+                      {(order.status === 'in_progress' || order.status === 'review') && (
+                        <button
+                          onClick={() => handleCompleteOrder(order)}
+                          className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-full font-black text-xs hover:bg-emerald-700 transition">
+                          <ThumbsUp size={14} /> تم الإكمال ✓
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -520,6 +555,7 @@ export default function ClientDashboard() {
           currentUserName={userName}
           currentUserRole="client"
           orderLabel={chatOrderLabel}
+          readOnly={orders.find(o => o.id === chatOrderId)?.status === 'completed'}
           onClose={() => setChatOrderId(null)}
         />
       )}
