@@ -20,6 +20,7 @@ import {
 
 import AdminSettingsTab from '../components/AdminSettingsTab';
 import AdminServicesTab from '../components/AdminServicesTab';
+import ChatBox from '../components/ChatBox';
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   pending:     { label: 'في الانتظار',     color: 'bg-amber-100 text-amber-700' },
@@ -90,6 +91,8 @@ const Dashboard = () => {
 
   // modal تفاصيل الطلب للمعلق
   const [selectedArtistOrder, setSelectedArtistOrder] = useState<any | null>(null);
+  const [chatOrderId, setChatOrderId] = useState<string | null>(null);
+  const [chatOrderLabel, setChatOrderLabel] = useState('');
 
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -1112,14 +1115,19 @@ const Dashboard = () => {
                   {artistOrders.slice(0, 6).map((order: any) => {
                     const status = statusConfig[order.status] || statusConfig.pending;
                     return (
-                      <div key={order.id} className="px-6 py-4 flex items-center justify-between hover:bg-white/5 transition cursor-pointer" onClick={() => setSelectedArtistOrder(order)}>
-                        <div>
+                      <div key={order.id} className="px-6 py-4 flex items-center justify-between hover:bg-white/5 transition">
+                        <div className="cursor-pointer flex-1" onClick={() => setSelectedArtistOrder(order)}>
                           <p className="text-white font-black text-sm">{order.selectedPackage}</p>
                           <p className="text-gray-400 font-bold text-xs mt-0.5">{order.clientName} · {order.workType}</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className={`px-3 py-1 rounded-full text-xs font-black ${status.color}`}>{status.label}</span>
-                          <Eye size={14} className="text-gray-500" />
+                          <button
+                            onClick={() => { setChatOrderId(order.id); setChatOrderLabel(`${order.selectedPackage} — ${order.clientName}`); }}
+                            className="w-8 h-8 bg-red-600/20 rounded-lg flex items-center justify-center hover:bg-red-600 transition group">
+                            <MessageSquare size={14} className="text-red-400 group-hover:text-white" />
+                          </button>
+                          <Eye size={14} className="text-gray-500 cursor-pointer" onClick={() => setSelectedArtistOrder(order)} />
                         </div>
                       </div>
                     );
@@ -1329,6 +1337,18 @@ const Dashboard = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Chat Modal — Artist */}
+      {chatOrderId && artist && (
+        <ChatBox
+          orderId={chatOrderId}
+          currentUserId={artist.id}
+          currentUserName={artist.name}
+          currentUserRole="artist"
+          orderLabel={chatOrderLabel}
+          onClose={() => setChatOrderId(null)}
+        />
       )}
     </div>
   );

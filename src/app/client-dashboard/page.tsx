@@ -12,6 +12,7 @@ import {
   PlayCircle, AlertCircle, FileText, X, Tag,
   Eye, Download, MessageSquare, Send, Bell
 } from 'lucide-react';
+import ChatBox from '../components/ChatBox';
 
 interface Order {
   id: string;
@@ -56,6 +57,8 @@ export default function ClientDashboard() {
   const [feedbackText, setFeedbackText] = useState('');
   const [sendingFeedback, setSendingFeedback] = useState(false);
   const [feedbackSent, setFeedbackSent] = useState(false);
+  const [chatOrderId, setChatOrderId] = useState<string | null>(null);
+  const [chatOrderLabel, setChatOrderLabel] = useState('');
 
   const [selectedPackage, setSelectedPackage] = useState('');
   const [selectedVoiceActor, setSelectedVoiceActor] = useState('');
@@ -330,11 +333,18 @@ export default function ClientDashboard() {
                       <p className="text-gray-500 font-bold text-sm mb-1">نوع العمل: <span className="text-gray-700">{order.workType}</span></p>
                       {order.description && <p className="text-gray-400 font-bold text-xs mt-2 line-clamp-2">{order.description}</p>}
                     </div>
-                    <button
-                      onClick={() => { setSelectedOrder(order); setFeedbackSent(false); }}
-                      className="flex items-center gap-2 bg-gray-100 text-gray-700 px-4 py-2 rounded-full font-black text-xs hover:bg-red-600 hover:text-white transition flex-shrink-0">
-                      <Eye size={14} /> التفاصيل
-                    </button>
+                    <div className="flex gap-2 flex-shrink-0">
+                      <button
+                        onClick={() => { setSelectedOrder(order); setFeedbackSent(false); }}
+                        className="flex items-center gap-2 bg-gray-100 text-gray-700 px-4 py-2 rounded-full font-black text-xs hover:bg-gray-200 transition">
+                        <Eye size={14} /> التفاصيل
+                      </button>
+                      <button
+                        onClick={() => { setChatOrderId(order.id); setChatOrderLabel(`${order.selectedPackage} — ${order.selectedVoiceActor}`); }}
+                        className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-full font-black text-xs hover:bg-red-700 transition">
+                        <MessageSquare size={14} /> دردشة
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -500,6 +510,18 @@ export default function ClientDashboard() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Chat Modal */}
+      {chatOrderId && (
+        <ChatBox
+          orderId={chatOrderId}
+          currentUserId={userId}
+          currentUserName={userName}
+          currentUserRole="client"
+          orderLabel={chatOrderLabel}
+          onClose={() => setChatOrderId(null)}
+        />
       )}
     </div>
   );
