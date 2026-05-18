@@ -68,6 +68,10 @@ const Dashboard = () => {
   const [newPkgFeature, setNewPkgFeature] = useState('');
   const [newPkgFeatures, setNewPkgFeatures] = useState<string[]>([]);
   const [newPkgPopular, setNewPkgPopular] = useState(false);
+  const [newPkgNameEn, setNewPkgNameEn] = useState('');
+  const [newPkgDescEn, setNewPkgDescEn] = useState('');
+  const [newPkgFeatureEn, setNewPkgFeatureEn] = useState('');
+  const [newPkgFeaturesEn, setNewPkgFeaturesEn] = useState<string[]>([]);
   const [addingPackage, setAddingPackage] = useState(false);
   const [deletingPackageId, setDeletingPackageId] = useState<string | null>(null);
   const [editingPackage, setEditingPackage] = useState<any | null>(null);
@@ -170,6 +174,12 @@ const Dashboard = () => {
     setNewPkgFeature('');
   };
   const handleRemoveFeature = (idx: number) => setNewPkgFeatures(prev => prev.filter((_, i) => i !== idx));
+  const handleAddFeatureEn = () => {
+    if (!newPkgFeatureEn.trim()) return;
+    setNewPkgFeaturesEn(prev => [...prev, newPkgFeatureEn.trim()]);
+    setNewPkgFeatureEn('');
+  };
+  const handleRemoveFeatureEn = (idx: number) => setNewPkgFeaturesEn(prev => prev.filter((_, i) => i !== idx));
 
   const handleAddPackage = async () => {
     if (!newPkgName.trim() || !newPkgPrice.trim()) return;
@@ -177,10 +187,11 @@ const Dashboard = () => {
     try {
       const docRef = await addDoc(collection(db, 'packages'), {
         name: newPkgName.trim(), price: newPkgPrice.trim(), desc: newPkgDesc.trim(),
-        features: newPkgFeatures, popular: newPkgPopular, createdAt: serverTimestamp(),
+        nameEn: newPkgNameEn.trim(), descEn: newPkgDescEn.trim(),
+        features: newPkgFeatures, featuresEn: newPkgFeaturesEn, popular: newPkgPopular, createdAt: serverTimestamp(),
       });
-      setAllPackages(prev => [...prev, { id: docRef.id, name: newPkgName.trim(), price: newPkgPrice.trim(), desc: newPkgDesc.trim(), features: newPkgFeatures, popular: newPkgPopular }]);
-      setNewPkgName(''); setNewPkgPrice(''); setNewPkgDesc(''); setNewPkgFeatures([]); setNewPkgPopular(false);
+      setAllPackages(prev => [...prev, { id: docRef.id, name: newPkgName.trim(), price: newPkgPrice.trim(), desc: newPkgDesc.trim(), nameEn: newPkgNameEn.trim(), descEn: newPkgDescEn.trim(), features: newPkgFeatures, featuresEn: newPkgFeaturesEn, popular: newPkgPopular }]);
+      setNewPkgName(''); setNewPkgPrice(''); setNewPkgDesc(''); setNewPkgNameEn(''); setNewPkgDescEn(''); setNewPkgFeatures([]); setNewPkgFeaturesEn([]); setNewPkgPopular(false);
     } catch (err) { alert('حدث خطأ.'); }
     setAddingPackage(false);
   };
@@ -201,7 +212,8 @@ const Dashboard = () => {
     try {
       await updateDoc(doc(db, 'packages', editingPackage.id), {
         name: editingPackage.name, price: editingPackage.price, desc: editingPackage.desc,
-        features: editingPackage.features, popular: editingPackage.popular,
+        nameEn: editingPackage.nameEn || '', descEn: editingPackage.descEn || '',
+        features: editingPackage.features, featuresEn: editingPackage.featuresEn || [], popular: editingPackage.popular,
       });
       setAllPackages(prev => prev.map(p => p.id === editingPackage.id ? editingPackage : p));
       setEditingPackage(null);
@@ -756,20 +768,30 @@ const Dashboard = () => {
                 <div className="p-8 space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-black text-gray-700 mb-2">اسم الباقة *</label>
-                      <input type="text" value={newPkgName} onChange={e => setNewPkgName(e.target.value)} placeholder="مثال: باقة التعليق الصوتي" className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition" />
+                      <label className="block text-sm font-black text-gray-700 mb-2">اسم الباقة (عربي) *</label>
+                      <input type="text" value={newPkgName} onChange={e => setNewPkgName(e.target.value)} placeholder="مثال: باقة التعليق الصوتي" dir="rtl" className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-black text-gray-700 mb-2">Package Name (English)</label>
+                      <input type="text" value={newPkgNameEn} onChange={e => setNewPkgNameEn(e.target.value)} placeholder="e.g. Voice-Over Package" dir="ltr" className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition" />
                     </div>
                     <div>
                       <label className="block text-sm font-black text-gray-700 mb-2">السعر *</label>
                       <input type="text" value={newPkgPrice} onChange={e => setNewPkgPrice(e.target.value)} placeholder="مثال: 15,000" className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition" />
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-black text-gray-700 mb-2">الوصف</label>
-                    <input type="text" value={newPkgDesc} onChange={e => setNewPkgDesc(e.target.value)} placeholder="وصف مختصر للباقة" className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition" />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-black text-gray-700 mb-2">الوصف (عربي)</label>
+                      <input type="text" value={newPkgDesc} onChange={e => setNewPkgDesc(e.target.value)} placeholder="وصف مختصر للباقة" dir="rtl" className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-black text-gray-700 mb-2">Description (English)</label>
+                      <input type="text" value={newPkgDescEn} onChange={e => setNewPkgDescEn(e.target.value)} placeholder="Short description" dir="ltr" className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition" />
+                    </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-black text-gray-700 mb-2">المميزات</label>
+                    <label className="block text-sm font-black text-gray-700 mb-2">المميزات (عربي)</label>
                     <div className="flex gap-2 mb-3">
                       <input type="text" value={newPkgFeature} onChange={e => setNewPkgFeature(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddFeature()} placeholder="اكتب ميزة واضغط إضافة أو Enter" className="flex-1 px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition" />
                       <button onClick={handleAddFeature} className="bg-gray-900 text-white px-4 py-3 rounded-xl font-black text-sm hover:bg-red-600 transition flex items-center gap-1"><Plus size={16} /> إضافة</button>
@@ -781,6 +803,24 @@ const Dashboard = () => {
                             <Check size={14} className="text-emerald-600 flex-shrink-0" />
                             <span className="flex-1 text-sm font-bold text-gray-700">{f}</span>
                             <button onClick={() => handleRemoveFeature(i)} className="text-red-400 hover:text-red-600 transition"><X size={14} /></button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-black text-gray-700 mb-2">Features (English)</label>
+                    <div className="flex gap-2 mb-3">
+                      <input type="text" value={newPkgFeatureEn} onChange={e => setNewPkgFeatureEn(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddFeatureEn()} placeholder="Type a feature and press Add or Enter" dir="ltr" className="flex-1 px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400 transition" />
+                      <button onClick={handleAddFeatureEn} className="bg-gray-900 text-white px-4 py-3 rounded-xl font-black text-sm hover:bg-red-600 transition flex items-center gap-1"><Plus size={16} /> Add</button>
+                    </div>
+                    {newPkgFeaturesEn.length > 0 && (
+                      <div className="space-y-2">
+                        {newPkgFeaturesEn.map((f, i) => (
+                          <div key={i} className="flex items-center gap-2 bg-gray-50 px-4 py-2 rounded-xl">
+                            <Check size={14} className="text-emerald-600 flex-shrink-0" />
+                            <span className="flex-1 text-sm font-bold text-gray-700">{f}</span>
+                            <button onClick={() => handleRemoveFeatureEn(i)} className="text-red-400 hover:text-red-600 transition"><X size={14} /></button>
                           </div>
                         ))}
                       </div>
@@ -809,18 +849,31 @@ const Dashboard = () => {
                         {editingPackage?.id === pkg.id ? (
                           <div className="space-y-3">
                             <div className="grid grid-cols-2 gap-3">
-                              <input value={editingPackage.name} onChange={e => setEditingPackage({ ...editingPackage, name: e.target.value })} className="px-3 py-2 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400" placeholder="اسم الباقة" />
-                              <input value={editingPackage.price} onChange={e => setEditingPackage({ ...editingPackage, price: e.target.value })} className="px-3 py-2 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400" placeholder="السعر" />
+                              <input value={editingPackage.name} onChange={e => setEditingPackage({ ...editingPackage, name: e.target.value })} dir="rtl" className="px-3 py-2 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400" placeholder="اسم الباقة (عربي)" />
+                              <input value={editingPackage.nameEn || ''} onChange={e => setEditingPackage({ ...editingPackage, nameEn: e.target.value })} dir="ltr" className="px-3 py-2 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-blue-400" placeholder="Package Name (English)" />
                             </div>
-                            <input value={editingPackage.desc} onChange={e => setEditingPackage({ ...editingPackage, desc: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400" placeholder="الوصف" />
+                            <div className="grid grid-cols-2 gap-3">
+                              <input value={editingPackage.desc} onChange={e => setEditingPackage({ ...editingPackage, desc: e.target.value })} dir="rtl" className="px-3 py-2 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400" placeholder="الوصف (عربي)" />
+                              <input value={editingPackage.descEn || ''} onChange={e => setEditingPackage({ ...editingPackage, descEn: e.target.value })} dir="ltr" className="px-3 py-2 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-blue-400" placeholder="Description (English)" />
+                            </div>
+                            <input value={editingPackage.price} onChange={e => setEditingPackage({ ...editingPackage, price: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-gray-200 outline-none font-bold text-sm focus:border-red-400" placeholder="السعر" />
                             <div className="space-y-2">
+                              <p className="text-xs font-black text-gray-500">المميزات (عربي)</p>
                               {editingPackage.features?.map((f: string, i: number) => (
                                 <div key={i} className="flex items-center gap-2">
-                                  <input value={f} onChange={e => { const updated = [...editingPackage.features]; updated[i] = e.target.value; setEditingPackage({ ...editingPackage, features: updated }); }} className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 outline-none font-bold text-sm focus:border-red-400" />
+                                  <input value={f} onChange={e => { const updated = [...editingPackage.features]; updated[i] = e.target.value; setEditingPackage({ ...editingPackage, features: updated }); }} dir="rtl" className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 outline-none font-bold text-sm focus:border-red-400" />
                                   <button onClick={() => setEditingPackage({ ...editingPackage, features: editingPackage.features.filter((_: any, fi: number) => fi !== i) })} className="text-red-400 hover:text-red-600"><X size={14} /></button>
                                 </div>
                               ))}
                               <button onClick={() => setEditingPackage({ ...editingPackage, features: [...(editingPackage.features || []), ''] })} className="text-gray-500 font-bold text-xs flex items-center gap-1 hover:text-red-600 transition"><Plus size={12} /> إضافة ميزة</button>
+                              <p className="text-xs font-black text-gray-500 mt-2">Features (English)</p>
+                              {(editingPackage.featuresEn || []).map((f: string, i: number) => (
+                                <div key={i} className="flex items-center gap-2">
+                                  <input value={f} onChange={e => { const updated = [...(editingPackage.featuresEn || [])]; updated[i] = e.target.value; setEditingPackage({ ...editingPackage, featuresEn: updated }); }} dir="ltr" className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 outline-none font-bold text-sm focus:border-blue-400" />
+                                  <button onClick={() => setEditingPackage({ ...editingPackage, featuresEn: (editingPackage.featuresEn || []).filter((_: any, fi: number) => fi !== i) })} className="text-red-400 hover:text-red-600"><X size={14} /></button>
+                                </div>
+                              ))}
+                              <button onClick={() => setEditingPackage({ ...editingPackage, featuresEn: [...(editingPackage.featuresEn || []), ''] })} className="text-blue-500 font-bold text-xs flex items-center gap-1 hover:text-blue-700 transition"><Plus size={12} /> Add Feature (EN)</button>
                             </div>
                             <div className="flex items-center gap-3">
                               <button onClick={() => setEditingPackage({ ...editingPackage, popular: !editingPackage.popular })} className={`w-10 h-5 rounded-full transition-all ${editingPackage.popular ? 'bg-red-600' : 'bg-gray-200'} relative`}>
