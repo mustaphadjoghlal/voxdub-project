@@ -5,7 +5,7 @@ import {
   doc, getDoc, updateDoc, arrayUnion, collection,
   getDocs, deleteDoc, query, where, addDoc, serverTimestamp
 } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../components/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useRouter } from 'next/navigation';
