@@ -1,14 +1,31 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '../context/AuthContext';
 
 const Admin: React.FC = () => {
   const router = useRouter();
+  const { userRole, logout, mounted } = useAuth();
+
+  useEffect(() => {
+    if (mounted && userRole !== 'admin') {
+      router.replace('/login');
+    }
+  }, [mounted, userRole, router]);
 
   const handleLogout = () => {
+    logout();
     router.push('/login');
   };
+
+  if (!mounted || userRole !== 'admin') {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-yellow-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 p-8">
