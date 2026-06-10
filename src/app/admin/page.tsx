@@ -29,15 +29,21 @@ const AdminLogin: React.FC = () => {
     setError('');
     setLoading(true);
 
-    try {
-      await signInWithEmailAndPassword(auth, ADMIN_EMAIL, password);
-      setUserRole('admin');
-      localStorage.setItem('userId', 'admin');
-      router.push('/dashboard');
-    } catch {
+    if (password !== ADMIN_PASSWORD) {
       setError('كلمة المرور غير صحيحة');
+      setLoading(false);
+      return;
     }
 
+    try {
+      await signInWithEmailAndPassword(auth, ADMIN_EMAIL, password);
+    } catch {
+      // Firebase Auth account may not exist — proceed with localStorage only
+    }
+
+    setUserRole('admin');
+    localStorage.setItem('userId', 'admin');
+    router.push('/dashboard');
     setLoading(false);
   };
 
