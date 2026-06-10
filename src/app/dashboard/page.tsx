@@ -325,7 +325,18 @@ const Dashboard = () => {
       setArtist({ ...artist, audioSamples: [...(artist.audioSamples || []), newSample] });
       await sendNotification({ artistId: 'admin', title: '🎙️ عينة صوتية جديدة بانتظار موافقتك', body: `رفع ${artist.name} عينة جديدة: "${sampleName}"`, type: 'new_sample' });
       setSampleName(''); setAudioSample(null);
-    } catch (_) { alert('حدث خطأ.'); }
+    } catch (err: any) {
+      console.error('Audio upload error:', err);
+      if (err?.code === 'storage/unauthorized') {
+        alert('خطأ في الصلاحيات — يرجى التواصل مع الأدمن لتحديث إعدادات Firebase Storage.');
+      } else if (err?.code === 'storage/canceled') {
+        alert('تم إلغاء الرفع.');
+      } else if (err?.code === 'storage/unknown') {
+        alert('خطأ غير معروف — تحقق من اتصالك بالإنترنت وحاول مجدداً.');
+      } else {
+        alert(`حدث خطأ: ${err?.message || err?.code || 'خطأ غير معروف'}`);
+      }
+    }
     setUploading(false);
   };
 
