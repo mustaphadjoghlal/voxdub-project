@@ -371,7 +371,7 @@ const Dashboard = () => {
     setUploadProgress(0);
     setUploadSuccess(false);
 
-    // تحويل الفيديو إلى صوت إذا كان الملف فيديو
+    // تحويل الفيديو إلى صوت إذا لزم
     let fileToUpload = audioSample;
     if (VIDEO_TYPES.includes(audioSample.type)) {
       setConverting(true);
@@ -386,40 +386,46 @@ const Dashboard = () => {
     }
 
     setUploading(true);
+    setUploadProgress(1); // يضمن ظهور الشريط فوراً
 
-    const storageRef = ref(storage, `audio_samples/${artist.id}/${Date.now()}_${fileToUpload.name}`);
-    const uploadTask = uploadBytesResumable(storageRef, fileToUpload);
-
-    uploadTask.on('state_changed',
-      (snapshot) => {
-        const pct = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-        setUploadProgress(pct);
-      },
-      (err: any) => {
-        console.error('Audio upload error:', err);
-        if (err?.code === 'storage/unauthorized') {
-          alert('خطأ في الصلاحيات — يرجى التواصل مع الأدمن لتحديث إعدادات Firebase Storage.');
-        } else {
-          alert(`حدث خطأ: ${err?.message || err?.code || 'خطأ غير معروف'}`);
-        }
-        setUploading(false);
-        setUploadProgress(0);
-      },
-      async () => {
-        try {
-          const url = await getDownloadURL(uploadTask.snapshot.ref);
-          const newSample = { name: sampleName, url, pendingApproval: true };
-          await updateDoc(doc(db, 'artists', artist.id), { audioSamples: arrayUnion(newSample) });
-          setArtist({ ...artist, audioSamples: [...(artist.audioSamples || []), newSample] });
-          await sendNotification({ artistId: 'admin', title: '🎙️ عينة صوتية جديدة بانتظار موافقتك', body: `رفع ${artist.name} عينة جديدة: "${sampleName}"`, type: 'new_sample' });
-          setSampleName(''); setAudioSample(null);
-          setUploadSuccess(true);
-          setTimeout(() => setUploadSuccess(false), 4000);
-        } catch (err) { alert('حدث خطأ أثناء الحفظ.'); }
-        setUploading(false);
-        setUploadProgress(0);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const storageRef = ref(storage, `audio_samples/${artist.id}/${Date.now()}_${fileToUpload.name}`);
+        const task = uploadBytesResumable(storageRef, fileToUpload);
+        task.on(
+          'state_changed',
+          (snap) => {
+            const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
+            setUploadProgress(pct < 1 ? 1 : pct);
+          },
+          (err) => reject(err),
+          async () => {
+            try {
+              const url = await getDownloadURL(task.snapshot.ref);
+              const newSample = { name: sampleName, url, pendingApproval: true };
+              await updateDoc(doc(db, 'artists', artist.id), { audioSamples: arrayUnion(newSample) });
+              setArtist(prev => ({ ...prev, audioSamples: [...(prev.audioSamples || []), newSample] }));
+              await sendNotification({ artistId: 'admin', title: '🎙️ عينة صوتية جديدة بانتظار موافقتك', body: `رفع ${artist.name} عينة جديدة: "${sampleName}"`, type: 'new_sample' });
+              setSampleName('');
+              setAudioSample(null);
+              setUploadSuccess(true);
+              setTimeout(() => setUploadSuccess(false), 4000);
+              resolve();
+            } catch (e) { reject(e); }
+          }
+        );
+      });
+    } catch (err: any) {
+      console.error('Upload error:', err);
+      if (err?.code === 'storage/unauthorized') {
+        alert('خطأ في الصلاحيات — يرجى التواصل مع الأدمن.');
+      } else {
+        alert(`حدث خطأ: ${err?.message || err?.code || 'خطأ غير معروف'}`);
       }
-    );
+    }
+
+    setUploading(false);
+    setUploadProgress(0);
   };
 
   const markAllRead = async () => {
@@ -1246,50 +1252,58 @@ const Dashboard = () => {
             <div className="glass rounded-2xl p-6">
               <div className="flex items-center gap-2 mb-4"><div className="w-8 h-8 bg-red-600/20 rounded-lg flex items-center justify-center"><Plus size={16} className="text-red-400" /></div><h2 className="text-white font-black">رفع عينة جديدة</h2></div>
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 mb-4"><p className="text-amber-400 font-bold text-xs">⏳ ستظهر للعملاء بعد موافقة الإدارة</p></div>
-              <div className="space-y-3">
-                <input type="text" value={sampleName} onChange={e => setSampleName(e.target.value)} className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white font-bold text-sm outline-none focus:border-red-500 transition placeholder:text-gray-500" placeholder="اسم العينة (مثال: إعلان تجاري)" />
-                <div className="border-2 border-dashed border-white/10 rounded-xl p-4 text-center hover:border-red-500/50 transition">
-                  <input type="file" accept="audio/*,video/*" id="audioFile" onChange={e => setAudioSample(e.target.files?.[0] || null)} className="hidden" />
-                  <label htmlFor="audioFile" className="cursor-pointer">
-                    <Mic size={24} className="text-gray-500 mx-auto mb-2" />
-                    <p className="text-gray-400 font-bold text-sm">{audioSample ? audioSample.name : 'اضغط لاختيار ملف صوتي أو فيديو'}</p>
-                    <p className="text-gray-600 font-bold text-xs mt-1">mp3 · wav · m4a · mp4 · mov · webm</p>
-                    {audioSample && VIDEO_TYPES.includes(audioSample.type) && (
-                      <p className="text-amber-400 font-bold text-xs mt-1">🎬 سيتم استخراج الصوت تلقائياً</p>
-                    )}
-                  </label>
+              {/* ── حالة الرفع ── */}
+              {(converting || uploading) ? (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-6 flex flex-col items-center gap-4 text-center">
+                  {converting ? (
+                    <>
+                      <div className="w-12 h-12 border-4 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                      <p className="text-amber-400 font-black">جاري استخراج الصوت من الفيديو...</p>
+                      <p className="text-gray-500 font-bold text-xs">يرجى الانتظار</p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-full">
+                        <div className="flex justify-between mb-2">
+                          <span className="text-gray-400 font-bold text-sm">جاري الرفع...</span>
+                          <span className="text-white font-black text-sm">{uploadProgress}%</span>
+                        </div>
+                        <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-red-500 to-red-400 rounded-full transition-all duration-500"
+                            style={{ width: `${uploadProgress}%` }}
+                          />
+                        </div>
+                      </div>
+                      <p className="text-gray-400 font-bold text-xs">{audioSample?.name}</p>
+                    </>
+                  )}
                 </div>
-                <button onClick={handleAudioUpload} disabled={uploading || converting || !audioSample || !sampleName} className="w-full bg-red-600 text-white py-3 rounded-xl font-black hover:bg-red-700 disabled:bg-white/5 disabled:text-gray-500 transition flex items-center justify-center gap-2">
-                  <Upload size={16} />
-                  {converting ? 'جاري استخراج الصوت...' : uploading ? `جاري الرفع... ${uploadProgress}%` : 'رفع العينة'}
-                </button>
-
-                {/* Converting indicator */}
-                {converting && (
-                  <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3">
-                    <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
-                    <p className="text-amber-400 font-bold text-sm">جاري استخراج الصوت من الفيديو...</p>
+              ) : uploadSuccess ? (
+                <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-6 flex flex-col items-center gap-3 text-center">
+                  <CheckCircle size={40} className="text-emerald-400" />
+                  <p className="text-emerald-400 font-black">تم رفع العينة بنجاح!</p>
+                  <p className="text-emerald-600 font-bold text-xs">ستظهر للعملاء بعد موافقة الإدارة</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <input type="text" value={sampleName} onChange={e => setSampleName(e.target.value)} className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white font-bold text-sm outline-none focus:border-red-500 transition placeholder:text-gray-500" placeholder="اسم العينة (مثال: إعلان تجاري)" />
+                  <div className="border-2 border-dashed border-white/10 rounded-xl p-4 text-center hover:border-red-500/50 transition">
+                    <input type="file" accept="audio/*,video/*" id="audioFile" onChange={e => setAudioSample(e.target.files?.[0] || null)} className="hidden" />
+                    <label htmlFor="audioFile" className="cursor-pointer">
+                      <Mic size={24} className="text-gray-500 mx-auto mb-2" />
+                      <p className="text-gray-400 font-bold text-sm">{audioSample ? audioSample.name : 'اضغط لاختيار ملف صوتي أو فيديو'}</p>
+                      <p className="text-gray-600 font-bold text-xs mt-1">mp3 · wav · m4a · mp4 · mov · webm</p>
+                      {audioSample && VIDEO_TYPES.includes(audioSample.type) && (
+                        <p className="text-amber-400 font-bold text-xs mt-1">🎬 سيتم استخراج الصوت تلقائياً</p>
+                      )}
+                    </label>
                   </div>
-                )}
-
-                {/* Progress Bar */}
-                {uploading && (
-                  <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
-                    <div
-                      className="h-full bg-red-500 rounded-full transition-all duration-300"
-                      style={{ width: `${uploadProgress}%` }}
-                    />
-                  </div>
-                )}
-
-                {/* Success Message */}
-                {uploadSuccess && (
-                  <div className="flex items-center gap-2 bg-emerald-500/20 border border-emerald-500/30 rounded-xl px-4 py-3">
-                    <CheckCircle size={18} className="text-emerald-400 flex-shrink-0" />
-                    <p className="text-emerald-400 font-black text-sm">تم رفع العينة بنجاح! ستظهر بعد موافقة الإدارة.</p>
-                  </div>
-                )}
-              </div>
+                  <button onClick={handleAudioUpload} disabled={!audioSample || !sampleName} className="w-full bg-red-600 text-white py-3 rounded-xl font-black hover:bg-red-700 disabled:bg-white/5 disabled:text-gray-500 transition flex items-center justify-center gap-2">
+                    <Upload size={16} /> رفع العينة
+                  </button>
+                </div>
+              )}
             </div>
             <div className="glass rounded-2xl overflow-hidden">
               <div className="px-6 py-4 border-b border-white/5"><h2 className="text-white font-black">عيناتك ({(artist?.audioSamples || []).length})</h2></div>
