@@ -22,8 +22,4 @@ yarn-debug.log*
 yarn-error.log*
 
 # typescript
-tsconfig.json
 next-env.d.ts
-
-# lock files (optional — keep if you want reproducible installs)
-package-lock.json
