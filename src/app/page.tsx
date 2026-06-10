@@ -117,7 +117,9 @@ export default function Home() {
 
   const filteredArtists = artists.filter(a =>
     (!searchQuery || a.name?.toLowerCase().includes(searchQuery.toLowerCase())) &&
-    (genderFilter === 'all' || a.gender === genderFilter)
+    (genderFilter === 'all' ||
+     (genderFilter === 'male' && (a.gender === 'ذكر' || a.gender === 'male')) ||
+     (genderFilter === 'female' && (a.gender === 'أنثى' || a.gender === 'female')))
   );
   const visibleArtists = filteredArtists.slice(0, visibleCount);
   const dir = isRTL ? 'rtl' : 'ltr';
