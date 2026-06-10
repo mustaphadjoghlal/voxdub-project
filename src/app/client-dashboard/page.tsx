@@ -254,15 +254,15 @@ export default function ClientDashboard() {
     <div className="min-h-screen bg-gray-50" dir="rtl">
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap'); * { font-family: 'Cairo', sans-serif; }`}</style>
 
-      <header className="bg-gray-900 text-white px-8 py-5 flex justify-between items-center sticky top-0 z-40">
-        <div className="flex items-center gap-3">
+      <header className="bg-gray-900 text-white px-4 md:px-8 py-4 flex justify-between items-center sticky top-0 z-40">
+        <div className="flex items-center gap-2">
           <div className="bg-red-600 p-2 rounded-xl"><Mic2 className="w-5 h-5 text-white" /></div>
-          <span className="text-xl font-black">Vox<span className="text-red-500">Dub</span></span>
-          <span className="text-gray-500 font-bold text-sm mr-2">— لوحة صاحب العمل</span>
+          <span className="text-lg font-black">Vox<span className="text-red-500">Dub</span></span>
+          <span className="text-gray-500 font-bold text-xs hidden md:inline mr-1">— لوحة صاحب العمل</span>
         </div>
-        <div className="flex items-center gap-4">
-          <Link href="/" className="text-gray-400 hover:text-white font-bold text-sm transition">الواجهة الرئيسية</Link>
-          <span className="text-gray-400 font-bold text-sm">مرحباً، {userName}</span>
+        <div className="flex items-center gap-2 md:gap-4">
+          <Link href="/" className="text-gray-400 hover:text-white font-bold text-xs md:text-sm transition hidden sm:block">الواجهة الرئيسية</Link>
+          <span className="text-gray-400 font-bold text-xs md:text-sm hidden sm:block">مرحباً، {userName}</span>
 
           {/* Notification Bell */}
           <div className="relative">
@@ -456,8 +456,8 @@ export default function ClientDashboard() {
 
       {/* New Order Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-3 md:p-4">
+          <div className="bg-white rounded-3xl p-5 md:p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-black text-gray-900">طلب جديد</h2>
               <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600"><X size={24} /></button>
