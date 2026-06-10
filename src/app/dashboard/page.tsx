@@ -495,7 +495,7 @@ const Dashboard = () => {
                     <div key={a.id} className="px-8 py-5">
                       <div className="flex items-center gap-4 mb-4">
                         <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center font-black text-gray-400">{a.name?.[0]}</div>
-                        <div><p className="font-black text-gray-900">{a.name}</p><p className="text-sm text-gray-500 font-bold">{a.voiceType} | {a.gender}</p></div>
+                        <div><p className="font-black text-gray-900">{a.name}</p><p className="text-sm text-gray-500 font-bold">{Array.isArray(a.voiceType) ? a.voiceType.join(' · ') : a.voiceType} | {a.gender}</p></div>
                       </div>
                       {a.audioSamples?.map((s: any, idx: number) => s.pendingApproval && (
                         <div key={idx} className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex items-center gap-4 mb-2 mr-14">
@@ -525,7 +525,7 @@ const Dashboard = () => {
                           <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-200 flex-shrink-0">
                             {a.profilePicture ? <img src={a.profilePicture} alt={a.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-400 font-black">{a.name?.[0]}</div>}
                           </div>
-                          <div><p className="font-black text-gray-900">{a.name}</p><p className="text-sm text-gray-500 font-bold">{a.voiceType} | {a.gender}</p></div>
+                          <div><p className="font-black text-gray-900">{a.name}</p><p className="text-sm text-gray-500 font-bold">{Array.isArray(a.voiceType) ? a.voiceType.join(' · ') : a.voiceType} | {a.gender}</p></div>
                         </div>
                         <div className="flex items-center gap-3">
                           <span className={`px-3 py-1 rounded-full text-xs font-black ${approved.length > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{approved.length} معتمدة</span>
@@ -1081,7 +1081,7 @@ const Dashboard = () => {
                   </>
                 )}
               </div>
-              <p className="text-gray-400 font-bold text-sm mb-4">{artist?.voiceType} · {artist?.gender}</p>
+              <p className="text-gray-400 font-bold text-sm mb-4">{Array.isArray(artist?.voiceType) ? artist.voiceType.join(' · ') : artist?.voiceType} · {artist?.gender}</p>
               <div className="flex flex-wrap gap-3 justify-center md:justify-start">
                 {[{ label: 'عينة معتمدة', value: approvedSamples.length }, { label: 'طلب', value: artistOrders.length }, { label: 'تقييم', value: avgRating || '—' }].map((stat, i) => (
                   <div key={i} className="glass rounded-xl px-3 py-2 text-center"><p className="text-white font-black text-lg">{stat.value}</p><p className="text-gray-400 text-xs font-bold">{stat.label}</p></div>

@@ -118,7 +118,7 @@ const Artists: React.FC = () => {
                     )}
                     <h3 className="text-xl font-black text-gray-900 mb-2">{artist.name}</h3>
                     <p className="text-gray-500 font-bold text-sm mb-1">{artist.gender}</p>
-                    <p className="text-gray-500 font-bold text-sm mb-4">{artist.voiceType}</p>
+                    <p className="text-gray-500 font-bold text-sm mb-4">{Array.isArray(artist.voiceType) ? artist.voiceType.join(' · ') : artist.voiceType}</p>
                     <span className="bg-red-50 text-red-600 font-black text-xs px-4 py-2 rounded-full">
                       {approvedCount} عينة صوتية
                     </span>

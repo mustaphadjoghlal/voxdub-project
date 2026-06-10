@@ -317,7 +317,7 @@ export default function Home() {
                             : <div className="w-full h-full flex items-center justify-center text-2xl font-black text-gray-400">{artist.name?.[0]}</div>}
                         </div>
                         <div className={`text-sm font-bold text-gray-300 space-y-1 ${isRTL ? 'text-right' : 'text-left'}`}>
-                          {artist.voiceType && <p>{t('artists.voiceType')}: <span className="text-white">{artist.voiceType}</span></p>}
+                          {artist.voiceType && <p>{t('artists.voiceType')}: <span className="text-white">{Array.isArray(artist.voiceType) ? artist.voiceType.join(' · ') : artist.voiceType}</span></p>}
                           {artist.experience && <p>{t('artists.experience')}: <span className="text-white">{artist.experience}</span></p>}
                         </div>
                       </div>
