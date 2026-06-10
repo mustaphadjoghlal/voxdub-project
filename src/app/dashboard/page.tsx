@@ -98,6 +98,7 @@ const Dashboard = () => {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [converting, setConverting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -171,6 +172,55 @@ const Dashboard = () => {
       await addDoc(collection(db, 'notifications'), { artistId, title, body, type, read: false, createdAt: serverTimestamp() });
     } catch (err) { console.error(err); }
   };
+
+  // ── تحويل الفيديو إلى صوت WAV باستخدام Web Audio API ──────────────────────
+  const extractAudioFromVideo = async (file: File): Promise<File> => {
+    const arrayBuffer = await file.arrayBuffer();
+    const audioCtx = new AudioContext();
+    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    await audioCtx.close();
+
+    // تحويل AudioBuffer → WAV
+    const numChannels = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    const length = audioBuffer.length;
+    const wavBuffer = new ArrayBuffer(44 + length * numChannels * 2);
+    const view = new DataView(wavBuffer);
+
+    const writeStr = (offset: number, str: string) => {
+      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    };
+    const floatTo16 = (v: number) => Math.max(-1, Math.min(1, v)) < 0
+      ? Math.max(-1, Math.min(1, v)) * 0x8000
+      : Math.max(-1, Math.min(1, v)) * 0x7FFF;
+
+    writeStr(0, 'RIFF');
+    view.setUint32(4, 36 + length * numChannels * 2, true);
+    writeStr(8, 'WAVE');
+    writeStr(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * 2, true);
+    view.setUint16(32, numChannels * 2, true);
+    view.setUint16(34, 16, true);
+    writeStr(36, 'data');
+    view.setUint32(40, length * numChannels * 2, true);
+
+    let offset = 44;
+    for (let i = 0; i < length; i++) {
+      for (let ch = 0; ch < numChannels; ch++) {
+        view.setInt16(offset, floatTo16(audioBuffer.getChannelData(ch)[i]), true);
+        offset += 2;
+      }
+    }
+
+    const baseName = file.name.replace(/\.[^/.]+$/, '');
+    return new File([wavBuffer], `${baseName}.wav`, { type: 'audio/wav' });
+  };
+
+  const VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm', 'video/mpeg', 'video/3gpp'];
 
   // ===== إدارة الباقات =====
   const handleAddFeature = () => {
@@ -316,14 +366,29 @@ const Dashboard = () => {
     setUploading(false);
   };
 
-  const handleAudioUpload = () => {
+  const handleAudioUpload = async () => {
     if (!audioSample || !sampleName || !artist) return;
-    setUploading(true);
     setUploadProgress(0);
     setUploadSuccess(false);
 
-    const storageRef = ref(storage, `audio_samples/${artist.id}/${Date.now()}_${audioSample.name}`);
-    const uploadTask = uploadBytesResumable(storageRef, audioSample);
+    // تحويل الفيديو إلى صوت إذا كان الملف فيديو
+    let fileToUpload = audioSample;
+    if (VIDEO_TYPES.includes(audioSample.type)) {
+      setConverting(true);
+      try {
+        fileToUpload = await extractAudioFromVideo(audioSample);
+      } catch {
+        alert('تعذّر استخراج الصوت من الفيديو، يرجى تحويله يدوياً.');
+        setConverting(false);
+        return;
+      }
+      setConverting(false);
+    }
+
+    setUploading(true);
+
+    const storageRef = ref(storage, `audio_samples/${artist.id}/${Date.now()}_${fileToUpload.name}`);
+    const uploadTask = uploadBytesResumable(storageRef, fileToUpload);
 
     uploadTask.on('state_changed',
       (snapshot) => {
@@ -1184,12 +1249,28 @@ const Dashboard = () => {
               <div className="space-y-3">
                 <input type="text" value={sampleName} onChange={e => setSampleName(e.target.value)} className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white font-bold text-sm outline-none focus:border-red-500 transition placeholder:text-gray-500" placeholder="اسم العينة (مثال: إعلان تجاري)" />
                 <div className="border-2 border-dashed border-white/10 rounded-xl p-4 text-center hover:border-red-500/50 transition">
-                  <input type="file" accept="audio/*" id="audioFile" onChange={e => setAudioSample(e.target.files?.[0] || null)} className="hidden" />
-                  <label htmlFor="audioFile" className="cursor-pointer"><Mic size={24} className="text-gray-500 mx-auto mb-2" /><p className="text-gray-400 font-bold text-sm">{audioSample ? audioSample.name : 'اضغط لاختيار ملف صوتي'}</p></label>
+                  <input type="file" accept="audio/*,video/*" id="audioFile" onChange={e => setAudioSample(e.target.files?.[0] || null)} className="hidden" />
+                  <label htmlFor="audioFile" className="cursor-pointer">
+                    <Mic size={24} className="text-gray-500 mx-auto mb-2" />
+                    <p className="text-gray-400 font-bold text-sm">{audioSample ? audioSample.name : 'اضغط لاختيار ملف صوتي أو فيديو'}</p>
+                    <p className="text-gray-600 font-bold text-xs mt-1">mp3 · wav · m4a · mp4 · mov · webm</p>
+                    {audioSample && VIDEO_TYPES.includes(audioSample.type) && (
+                      <p className="text-amber-400 font-bold text-xs mt-1">🎬 سيتم استخراج الصوت تلقائياً</p>
+                    )}
+                  </label>
                 </div>
-                <button onClick={handleAudioUpload} disabled={uploading || !audioSample || !sampleName} className="w-full bg-red-600 text-white py-3 rounded-xl font-black hover:bg-red-700 disabled:bg-white/5 disabled:text-gray-500 transition flex items-center justify-center gap-2">
-                  <Upload size={16} />{uploading ? `جاري الرفع... ${uploadProgress}%` : 'رفع العينة'}
+                <button onClick={handleAudioUpload} disabled={uploading || converting || !audioSample || !sampleName} className="w-full bg-red-600 text-white py-3 rounded-xl font-black hover:bg-red-700 disabled:bg-white/5 disabled:text-gray-500 transition flex items-center justify-center gap-2">
+                  <Upload size={16} />
+                  {converting ? 'جاري استخراج الصوت...' : uploading ? `جاري الرفع... ${uploadProgress}%` : 'رفع العينة'}
                 </button>
+
+                {/* Converting indicator */}
+                {converting && (
+                  <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3">
+                    <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                    <p className="text-amber-400 font-bold text-sm">جاري استخراج الصوت من الفيديو...</p>
+                  </div>
+                )}
 
                 {/* Progress Bar */}
                 {uploading && (
