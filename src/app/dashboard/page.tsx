@@ -5,7 +5,7 @@ import {
   doc, getDoc, updateDoc, arrayUnion, collection,
   getDocs, deleteDoc, query, where, addDoc, serverTimestamp
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../components/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -96,6 +96,8 @@ const Dashboard = () => {
 
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -314,30 +316,45 @@ const Dashboard = () => {
     setUploading(false);
   };
 
-  const handleAudioUpload = async () => {
-    if (!audioSample || !sampleName || !artist) return; setUploading(true);
-    try {
-      const storageRef = ref(storage, `audio_samples/${artist.id}/${Date.now()}_${audioSample.name}`);
-      await uploadBytes(storageRef, audioSample);
-      const url = await getDownloadURL(storageRef);
-      const newSample = { name: sampleName, url, pendingApproval: true };
-      await updateDoc(doc(db, 'artists', artist.id), { audioSamples: arrayUnion(newSample) });
-      setArtist({ ...artist, audioSamples: [...(artist.audioSamples || []), newSample] });
-      await sendNotification({ artistId: 'admin', title: '🎙️ عينة صوتية جديدة بانتظار موافقتك', body: `رفع ${artist.name} عينة جديدة: "${sampleName}"`, type: 'new_sample' });
-      setSampleName(''); setAudioSample(null);
-    } catch (err: any) {
-      console.error('Audio upload error:', err);
-      if (err?.code === 'storage/unauthorized') {
-        alert('خطأ في الصلاحيات — يرجى التواصل مع الأدمن لتحديث إعدادات Firebase Storage.');
-      } else if (err?.code === 'storage/canceled') {
-        alert('تم إلغاء الرفع.');
-      } else if (err?.code === 'storage/unknown') {
-        alert('خطأ غير معروف — تحقق من اتصالك بالإنترنت وحاول مجدداً.');
-      } else {
-        alert(`حدث خطأ: ${err?.message || err?.code || 'خطأ غير معروف'}`);
+  const handleAudioUpload = () => {
+    if (!audioSample || !sampleName || !artist) return;
+    setUploading(true);
+    setUploadProgress(0);
+    setUploadSuccess(false);
+
+    const storageRef = ref(storage, `audio_samples/${artist.id}/${Date.now()}_${audioSample.name}`);
+    const uploadTask = uploadBytesResumable(storageRef, audioSample);
+
+    uploadTask.on('state_changed',
+      (snapshot) => {
+        const pct = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+        setUploadProgress(pct);
+      },
+      (err: any) => {
+        console.error('Audio upload error:', err);
+        if (err?.code === 'storage/unauthorized') {
+          alert('خطأ في الصلاحيات — يرجى التواصل مع الأدمن لتحديث إعدادات Firebase Storage.');
+        } else {
+          alert(`حدث خطأ: ${err?.message || err?.code || 'خطأ غير معروف'}`);
+        }
+        setUploading(false);
+        setUploadProgress(0);
+      },
+      async () => {
+        try {
+          const url = await getDownloadURL(uploadTask.snapshot.ref);
+          const newSample = { name: sampleName, url, pendingApproval: true };
+          await updateDoc(doc(db, 'artists', artist.id), { audioSamples: arrayUnion(newSample) });
+          setArtist({ ...artist, audioSamples: [...(artist.audioSamples || []), newSample] });
+          await sendNotification({ artistId: 'admin', title: '🎙️ عينة صوتية جديدة بانتظار موافقتك', body: `رفع ${artist.name} عينة جديدة: "${sampleName}"`, type: 'new_sample' });
+          setSampleName(''); setAudioSample(null);
+          setUploadSuccess(true);
+          setTimeout(() => setUploadSuccess(false), 4000);
+        } catch (err) { alert('حدث خطأ أثناء الحفظ.'); }
+        setUploading(false);
+        setUploadProgress(0);
       }
-    }
-    setUploading(false);
+    );
   };
 
   const markAllRead = async () => {
@@ -1170,7 +1187,27 @@ const Dashboard = () => {
                   <input type="file" accept="audio/*" id="audioFile" onChange={e => setAudioSample(e.target.files?.[0] || null)} className="hidden" />
                   <label htmlFor="audioFile" className="cursor-pointer"><Mic size={24} className="text-gray-500 mx-auto mb-2" /><p className="text-gray-400 font-bold text-sm">{audioSample ? audioSample.name : 'اضغط لاختيار ملف صوتي'}</p></label>
                 </div>
-                <button onClick={handleAudioUpload} disabled={uploading || !audioSample || !sampleName} className="w-full bg-red-600 text-white py-3 rounded-xl font-black hover:bg-red-700 disabled:bg-white/5 disabled:text-gray-500 transition flex items-center justify-center gap-2"><Upload size={16} />{uploading ? 'جاري الرفع...' : 'رفع العينة'}</button>
+                <button onClick={handleAudioUpload} disabled={uploading || !audioSample || !sampleName} className="w-full bg-red-600 text-white py-3 rounded-xl font-black hover:bg-red-700 disabled:bg-white/5 disabled:text-gray-500 transition flex items-center justify-center gap-2">
+                  <Upload size={16} />{uploading ? `جاري الرفع... ${uploadProgress}%` : 'رفع العينة'}
+                </button>
+
+                {/* Progress Bar */}
+                {uploading && (
+                  <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="h-full bg-red-500 rounded-full transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                )}
+
+                {/* Success Message */}
+                {uploadSuccess && (
+                  <div className="flex items-center gap-2 bg-emerald-500/20 border border-emerald-500/30 rounded-xl px-4 py-3">
+                    <CheckCircle size={18} className="text-emerald-400 flex-shrink-0" />
+                    <p className="text-emerald-400 font-black text-sm">تم رفع العينة بنجاح! ستظهر بعد موافقة الإدارة.</p>
+                  </div>
+                )}
               </div>
             </div>
             <div className="glass rounded-2xl overflow-hidden">
