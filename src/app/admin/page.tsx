@@ -1,66 +1,106 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../components/firebase';
 import { useAuth } from '../context/AuthContext';
+import { Mic2, LogIn, Lock } from 'lucide-react';
 
-const Admin: React.FC = () => {
+const ADMIN_EMAIL = 'admin@voxdub.com';
+const ADMIN_PASSWORD = 'admin123';
+
+const AdminLogin: React.FC = () => {
   const router = useRouter();
-  const { userRole, logout, mounted } = useAuth();
+  const { userRole, setUserRole, mounted } = useAuth();
+
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (mounted && userRole !== 'admin') {
-      router.replace('/login');
+    if (mounted && userRole === 'admin') {
+      router.replace('/dashboard');
     }
   }, [mounted, userRole, router]);
 
-  const handleLogout = () => {
-    logout();
-    router.push('/login');
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      await signInWithEmailAndPassword(auth, ADMIN_EMAIL, password);
+      setUserRole('admin');
+      localStorage.setItem('userId', 'admin');
+      router.push('/dashboard');
+    } catch {
+      setError('كلمة المرور غير صحيحة');
+    }
+
+    setLoading(false);
   };
 
-  if (!mounted || userRole !== 'admin') {
+  if (!mounted || userRole === 'admin') {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="w-10 h-10 border-4 border-yellow-600 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 p-8">
-      <div className="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-md">
-        <h2 className="text-3xl font-bold text-yellow-600 mb-6 text-center">
-          لوحة تحكم المديرة
-        </h2>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
-            <h3 className="text-xl font-semibold text-yellow-700 mb-2">إدارة المعلقين</h3>
-            <p className="text-gray-600 mb-4">عرض وإدارة جميع المعلقين المسجلين في النظام.</p>
-            <a href="/artists" className="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded inline-block">
-              عرض المعلقين
-            </a>
-          </div>
+    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4" dir="rtl">
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap'); * { font-family: 'Cairo', sans-serif; }`}</style>
 
-          <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
-            <h3 className="text-xl font-semibold text-yellow-700 mb-2">الطلبات</h3>
-            <p className="text-gray-600 mb-4">عرض وإدارة جميع طلبات العملاء.</p>
-            <button className="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded">
-              عرض الطلبات
-            </button>
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center gap-2 mb-4">
+            <div className="bg-red-600 p-2 rounded-xl">
+              <Mic2 className="text-white w-6 h-6" />
+            </div>
+            <span className="text-3xl font-black text-white">Vox<span className="text-red-500">Dub</span></span>
+          </div>
+          <div className="flex items-center justify-center gap-2 text-yellow-500">
+            <Lock size={16} />
+            <p className="font-black text-sm">دخول المديرة</p>
           </div>
         </div>
 
-        <button
-          onClick={handleLogout}
-          className="w-full bg-red-800 hover:bg-red-700 text-white font-bold py-3 px-4 rounded focus:outline-none focus:shadow-outline transition"
-        >
-          تسجيل الخروج
-        </button>
+        <div className="bg-white/5 border border-white/10 rounded-3xl p-8">
+          <form onSubmit={handleLogin} className="space-y-5">
+            <div>
+              <label className="block text-sm font-black text-gray-300 mb-2">كلمة المرور</label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/10 text-white outline-none font-bold text-sm focus:border-yellow-500 transition-colors placeholder-gray-500"
+                placeholder="أدخل كلمة المرور"
+                required
+                autoFocus
+              />
+            </div>
+
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-bold text-center py-3 px-4 rounded-xl">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-yellow-600 hover:bg-yellow-500 disabled:bg-gray-600 text-white py-4 rounded-2xl font-black text-lg transition-all flex items-center justify-center gap-2"
+            >
+              <LogIn size={20} />
+              {loading ? 'جاري التحقق...' : 'دخول'}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );
 };
 
-export default Admin;
+export default AdminLogin;
