@@ -58,7 +58,7 @@ const Artists: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50" dir="rtl">
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap'); * { font-family: 'Cairo', sans-serif; }`}</style>
+      
 
       <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-gray-100 h-20 flex items-center">
         <div className="max-w-6xl mx-auto px-6 w-full flex justify-between items-center">

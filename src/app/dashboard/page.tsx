@@ -527,7 +527,7 @@ const Dashboard = () => {
 
     return (
       <div className="min-h-screen bg-gray-50" dir="rtl">
-        <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap'); * { font-family: 'Cairo', sans-serif; }`}</style>
+        
 
         <header className="bg-gray-900 text-white px-8 py-5 flex justify-between items-center sticky top-0 z-40 border-b border-white/5">
           <div className="flex items-center gap-3">
@@ -1130,8 +1130,6 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-[#0f0f0f]" dir="rtl">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
-        * { font-family: 'Cairo', sans-serif; }
         .glass { background: rgba(255,255,255,0.04); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); }
         .red-glow { box-shadow: 0 0 40px rgba(220,38,38,0.2); }
       `}</style>

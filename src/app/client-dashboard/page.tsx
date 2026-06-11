@@ -252,7 +252,7 @@ export default function ClientDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50" dir="rtl">
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap'); * { font-family: 'Cairo', sans-serif; }`}</style>
+      
 
       <header className="bg-gray-900 text-white px-4 md:px-8 py-4 flex justify-between items-center sticky top-0 z-40">
         <div className="flex items-center gap-2">

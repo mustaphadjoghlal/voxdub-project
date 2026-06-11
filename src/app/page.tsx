@@ -127,8 +127,6 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-white font-sans" dir={dir} style={{ textAlign: isRTL ? 'right' : 'left' }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
-        * { font-family: 'Cairo', sans-serif; }
         @keyframes marquee { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
         .animate-marquee { animation: marquee 20s linear infinite; }
         .animate-marquee:hover { animation-play-state: paused; }
@@ -203,7 +201,7 @@ export default function Home() {
       <section className="pt-28 pb-40 px-6 text-center bg-white">
         <div className="max-w-4xl mx-auto">
           <div className="inline-block bg-red-50 text-red-600 font-black px-5 py-2 rounded-full text-sm mb-8 border border-red-100">{t('hero.badge')}</div>
-          <h1 className="text-6xl md:text-7xl font-black text-gray-900 mb-8 leading-tight">
+          <h1 className="text-4xl sm:text-5xl md:text-7xl font-black text-gray-900 mb-8 leading-tight">
             {t('hero.title1')}<br /><span className="text-red-600">{t('hero.title2')}</span>
           </h1>
           <p className="text-xl text-gray-500 max-w-2xl mx-auto mb-12 leading-relaxed font-bold">{t('hero.subtitle')}</p>

@@ -16,6 +16,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ar" dir="rtl">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet" />
+        <style>{`* { font-family: 'Cairo', sans-serif; }`}</style>
+      </head>
       <body>
         <AuthProvider>
           <SettingsProvider>

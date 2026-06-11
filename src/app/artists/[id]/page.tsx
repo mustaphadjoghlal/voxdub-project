@@ -130,8 +130,6 @@ export default function ArtistProfile() {
   return (
     <div className="min-h-screen bg-[#0a0a0a]" dir="rtl">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
-        * { font-family: 'Cairo', sans-serif; }
         .glass { background: rgba(255,255,255,0.04); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); }
         .glow { box-shadow: 0 0 60px rgba(220,38,38,0.15); }
         .wave-bar { animation: wave 1.2s ease-in-out infinite; }
