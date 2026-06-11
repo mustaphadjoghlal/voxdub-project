@@ -198,10 +198,10 @@ export default function Home() {
       {showUserMenu && <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />}
 
       {/* Hero */}
-      <section className="pt-28 pb-40 px-6 text-center bg-white">
+      <section className="pt-10 md:pt-24 pb-20 md:pb-40 px-4 text-center bg-white">
         <div className="max-w-4xl mx-auto">
           <div className="inline-block bg-red-50 text-red-600 font-black px-5 py-2 rounded-full text-sm mb-8 border border-red-100">{t('hero.badge')}</div>
-          <h1 className="text-4xl sm:text-5xl md:text-7xl font-black text-gray-900 mb-8 leading-tight">
+          <h1 className="font-black text-gray-900 mb-8 leading-tight" style={{ fontSize: 'clamp(2.5rem, 11vw, 5rem)' }}>
             {t('hero.title1')}<br /><span className="text-red-600">{t('hero.title2')}</span>
           </h1>
           <p className="text-xl text-gray-500 max-w-2xl mx-auto mb-12 leading-relaxed font-bold">{t('hero.subtitle')}</p>
