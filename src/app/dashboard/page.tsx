@@ -84,8 +84,11 @@ const Dashboard = () => {
 
   const [editingBio, setEditingBio] = useState(false);
   const [editingTagline, setEditingTagline] = useState(false);
+  const [editingVoiceInfo, setEditingVoiceInfo] = useState(false);
   const [bioValue, setBioValue] = useState('');
   const [taglineValue, setTaglineValue] = useState('');
+  const [voiceTypeValue, setVoiceTypeValue] = useState<string[]>([]);
+  const [genderValue, setGenderValue] = useState('');
   const [editingSampleIdx, setEditingSampleIdx] = useState<number | null>(null);
   const [editingSampleName, setEditingSampleName] = useState('');
 
@@ -146,6 +149,8 @@ const Dashboard = () => {
             setArtist(data);
             setBioValue(data.bio || '');
             setTaglineValue(data.tagline || '');
+            setVoiceTypeValue(Array.isArray(data.voiceType) ? data.voiceType : data.voiceType ? [data.voiceType] : []);
+            setGenderValue(data.gender || '');
             const ordersSnap = await getDocs(collection(db, 'orders'));
             const myOrders = ordersSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(o => o.selectedVoiceActor === data.name);
             setArtistOrders(myOrders);
@@ -352,6 +357,21 @@ const Dashboard = () => {
     if (!artist) return; setSaving(true);
     try { await updateDoc(doc(db, 'artists', artist.id), { tagline: taglineValue }); setArtist({ ...artist, tagline: taglineValue }); setEditingTagline(false); } catch (_) { alert('حدث خطأ.'); }
     setSaving(false);
+  };
+
+  const handleSaveVoiceInfo = async () => {
+    if (!artist) return; setSaving(true);
+    try {
+      await updateDoc(doc(db, 'artists', artist.id), { voiceType: voiceTypeValue, gender: genderValue });
+      setArtist({ ...artist, voiceType: voiceTypeValue, gender: genderValue });
+      setEditingVoiceInfo(false);
+    } catch (_) { alert('حدث خطأ.'); }
+    setSaving(false);
+  };
+
+  const VOICE_TYPES = ['رخيم', 'ناعم', 'إعلاني', 'وثائقي', 'شعر وخواطر', 'أطفال', 'درامي', 'إخباري'];
+  const toggleVoiceType = (vt: string) => {
+    setVoiceTypeValue(prev => prev.includes(vt) ? prev.filter(x => x !== vt) : [...prev, vt]);
   };
 
   const handleProfilePicUpload = async () => {
@@ -1383,6 +1403,47 @@ const Dashboard = () => {
                   </div>
                 </div>
               ) : <p className="text-red-400 font-bold italic text-sm">{artist?.tagline ? `"${artist.tagline}"` : <span className="text-gray-600">لم تُضف tagline بعد...</span>}</p>}
+            </div>
+            <div className="glass rounded-2xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2"><Mic size={18} className="text-red-400" /><h2 className="text-white font-black">نوع الصوت والجنس</h2></div>
+                {!editingVoiceInfo && <button onClick={() => setEditingVoiceInfo(true)} className="glass text-gray-400 px-3 py-1.5 rounded-lg font-bold text-xs hover:text-white transition flex items-center gap-1"><Edit3 size={12} /> تعديل</button>}
+              </div>
+              {editingVoiceInfo ? (
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-gray-400 font-bold text-xs mb-2">نوع الصوت (اختر واحداً أو أكثر)</p>
+                    <div className="flex flex-wrap gap-2">
+                      {VOICE_TYPES.map(vt => (
+                        <button key={vt} onClick={() => toggleVoiceType(vt)}
+                          className={`px-3 py-1.5 rounded-full font-bold text-xs transition ${voiceTypeValue.includes(vt) ? 'bg-red-600 text-white' : 'glass text-gray-400 hover:text-white'}`}>
+                          {vt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-gray-400 font-bold text-xs mb-2">الجنس</p>
+                    <div className="flex gap-3">
+                      {['ذكر', 'أنثى'].map(g => (
+                        <button key={g} onClick={() => setGenderValue(g)}
+                          className={`flex-1 py-2 rounded-xl font-black text-sm transition ${genderValue === g ? 'bg-red-600 text-white' : 'glass text-gray-400 hover:text-white'}`}>
+                          {g}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={handleSaveVoiceInfo} disabled={saving} className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl font-black text-sm hover:bg-emerald-700 disabled:opacity-50 transition flex items-center justify-center gap-2"><Save size={14} /> حفظ</button>
+                    <button onClick={() => { setEditingVoiceInfo(false); setVoiceTypeValue(Array.isArray(artist?.voiceType) ? artist.voiceType : artist?.voiceType ? [artist.voiceType] : []); setGenderValue(artist?.gender || ''); }} className="flex-1 glass text-gray-400 py-2.5 rounded-xl font-black text-sm hover:bg-white/10 transition">إلغاء</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-gray-400 font-bold text-sm">نوع الصوت: <span className="text-white">{Array.isArray(artist?.voiceType) ? artist.voiceType.join(' · ') : artist?.voiceType || '—'}</span></p>
+                  <p className="text-gray-400 font-bold text-sm">الجنس: <span className="text-white">{artist?.gender || '—'}</span></p>
+                </div>
+              )}
             </div>
           </div>
         )}
